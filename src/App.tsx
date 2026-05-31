@@ -17,12 +17,20 @@ export default function App() {
   const decayMood = usePigeonStore((s) => s.decayMood);
   const updateTimeDerived = useUIStore((s) => s.updateTimeDerived);
   const touchDetected = useUIStore((s) => s.touchDetected);
+  const initFromCloud = usePigeonStore((s) => s.initFromCloud);
+  const cloudReady = usePigeonStore((s) => s.cloudReady);
 
   // Track previous date for journal generation
   const prevDateRef = useRef(getTodayDateString());
 
-  // Pigeon AI tick: every 30-60 seconds
+  // Initialize from Supabase (or localStorage fallback) on mount
   useEffect(() => {
+    initFromCloud();
+  }, [initFromCloud]);
+
+  // Pigeon AI tick: every 30-60 seconds (only after cloud is ready)
+  useEffect(() => {
+    if (!cloudReady) return;
     const schedule = () => {
       const delay = 30000 + Math.random() * 30000;
       return setTimeout(() => {
@@ -32,10 +40,11 @@ export default function App() {
     };
     const timer = schedule();
     return () => clearTimeout(timer);
-  }, [tickPigeonAI]);
+  }, [tickPigeonAI, cloudReady]);
 
   // Mood decay + time update + daily journal check: every 60 seconds
   useEffect(() => {
+    if (!cloudReady) return;
     updateTimeDerived();
     const interval = setInterval(() => {
       decayMood();
@@ -50,7 +59,7 @@ export default function App() {
       }
     }, 60000);
     return () => clearInterval(interval);
-  }, [decayMood, updateTimeDerived]);
+  }, [decayMood, updateTimeDerived, cloudReady]);
 
   // Global touch detection for idle mode
   useEffect(() => {
@@ -70,6 +79,38 @@ export default function App() {
       <SidePanel />
       <PigeonBubble />
       <TouchFeedback />
+      {!cloudReady && <LoadingOverlay />}
     </>
+  );
+}
+
+function LoadingOverlay() {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(245, 240, 232, 0.95)',
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      gap: 16,
+    }}>
+      <div style={{ fontSize: 56, animation: 'bob 1.2s ease infinite' }}>🕊️</div>
+      <div style={{
+        fontSize: 16, fontWeight: 600, color: '#4A3728',
+        letterSpacing: 1,
+      }}>
+        正在连接云端鸽子...
+      </div>
+      <div style={{
+        width: 120, height: 3, borderRadius: 2,
+        background: '#E0D5C0', overflow: 'hidden',
+      }}>
+        <div style={{
+          width: '40%', height: '100%',
+          background: '#8B6B5A',
+          borderRadius: 2,
+          animation: 'loadingBar 1.5s ease-in-out infinite',
+        }} />
+      </div>
+    </div>
   );
 }

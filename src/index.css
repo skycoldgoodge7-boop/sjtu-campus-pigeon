@@ -157,3 +157,8 @@ html, body {
   50% { transform: translateY(-4px); }
 }
 
+@keyframes loadingBar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
