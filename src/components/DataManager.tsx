@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react';
-import { usePigeonStore } from '../store/pigeonStore';
 
 export default function DataManager() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null);

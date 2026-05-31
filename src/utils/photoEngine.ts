@@ -73,7 +73,7 @@ export function getRemainingPhotoCount(landmarkId: string): number {
  */
 export function getTotalRemainingPhotos(): number {
   let total = 0;
-  for (const [id, photos] of Object.entries(LANDMARK_PHOTOS)) {
+  for (const [_id, photos] of Object.entries(LANDMARK_PHOTOS)) {
     total += photos.filter((p) => !GLOBAL_USED_PHOTOS.has(p)).length;
   }
   // 加上彩蛋照片
