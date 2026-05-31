@@ -1,0 +1,159 @@
+:root {
+  /* 手绘绘本色盘 — 低饱和、温暖 */
+  --color-paper: #F5F0E8;
+  --color-paper-warm: #F0E8D5;
+  --color-ink: #4A3728;
+  --color-ink-light: #8B7355;
+  --color-ink-faint: #B0A090;
+  --color-primary: #8B6B5A;
+  --color-primary-light: #B89888;
+  --color-accent: #D4A878;
+  --color-bg: #FFF8E7;
+  --color-bg-warm: #FFF0D0;
+  --color-green: #A0B888;
+  --color-green-light: #C0D5B0;
+  --color-water: #A8C4D4;
+  --color-water-light: #C4D8E4;
+  --color-sky: #B0C8D8;
+  --color-sky-light: #D0DEE8;
+  --color-text: #4A3728;
+  --color-text-light: #8B7355;
+  --color-white: #FFFCF5;
+  --color-border: #E0D5C0;
+  --color-shadow: rgba(100, 80, 60, 0.06);
+  --color-blush: #E8D5D0;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+
+  --shadow-sm: 0 1px 4px var(--color-shadow);
+  --shadow-md: 0 2px 12px rgba(100, 80, 60, 0.08);
+  --shadow-lg: 0 4px 24px rgba(100, 80, 60, 0.1);
+
+  --font-main: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-size-base: clamp(14px, 1.2vw, 18px);
+  --font-size-lg: clamp(18px, 2vw, 28px);
+  --font-size-xl: clamp(24px, 3.5vw, 48px);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: var(--font-main);
+  background: #1a1a2e;
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ====== 简约童趣纸张底 ====== */
+.map-container {
+  background-color: #F8F4EC;
+  background-image:
+    /* 轻微纸张纤维 */
+    radial-gradient(circle at 25% 18%, rgba(220,205,175,0.06) 0%, transparent 45%),
+    radial-gradient(circle at 72% 55%, rgba(215,200,170,0.05) 0%, transparent 40%);
+  background-blend-mode: normal;
+}
+
+/* ====== Animations ====== */
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(-3deg); }
+  75% { transform: translateY(-6px) rotate(3deg); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(140,160,120,0.2); }
+  50% { box-shadow: 0 0 14px rgba(140,160,120,0.35); }
+}
+
+@keyframes gentleFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-3px) rotate(-1deg); }
+  75% { transform: translateY(-3px) rotate(1deg); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to { transform: translateX(100%); }
+}
+
+@keyframes ripple {
+  to { transform: scale(4); opacity: 0; }
+}
+
+@keyframes particleFall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+@keyframes scrollUp {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes tickerScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+

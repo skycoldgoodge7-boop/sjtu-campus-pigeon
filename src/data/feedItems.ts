@@ -1,0 +1,88 @@
+import type { FeedItem } from '../types';
+
+export const feedItems: FeedItem[] = [
+  {
+    id: 'bread',
+    name: '面包',
+    emoji: '🥐',
+    moodEffect: { warmth: 5, social: 1 },
+    thoughtBubbles: ['好香的面包！', '最喜欢面包屑了～', '咕咕，谢谢！'],
+  },
+  {
+    id: 'coffee',
+    name: '咖啡',
+    emoji: '☕',
+    moodEffect: { energy: 5, academic: 3, stress: 2 },
+    thoughtBubbles: ['今晚不睡了！', '图书馆见！', '好苦...但是提神'],
+  },
+  {
+    id: 'milkTea',
+    name: '奶茶',
+    emoji: '🧋',
+    moodEffect: { social: 5, warmth: 3 },
+    thoughtBubbles: ['甜甜的真好喝！', '想去人多的地方～', '今天心情不错！'],
+  },
+  {
+    id: 'noodles',
+    name: '泡面',
+    emoji: '🍜',
+    moodEffect: { loneliness: 5, stress: 3 },
+    thoughtBubbles: ['夜深了...', '一个人也挺好的', '闻到泡面味了'],
+  },
+  {
+    id: 'fries',
+    name: '薯条',
+    emoji: '🍟',
+    moodEffect: { slack: 6, social: 1 },
+    thoughtBubbles: ['好悠闲啊～', '今天不想飞了', '躺着真舒服...'],
+  },
+  {
+    id: 'flower',
+    name: '花',
+    emoji: '🌸',
+    moodEffect: { romance: 5, warmth: 3 },
+    thoughtBubbles: ['好美的花！', '春天来了吗？', '想去花园看看'],
+  },
+  {
+    id: 'umbrella',
+    name: '雨伞',
+    emoji: '☂️',
+    moodEffect: { warmth: 4 },
+    thoughtBubbles: ['下雨也不怕！', '有伞真好～', '躲在屋檐下也不错'],
+  },
+  {
+    id: 'headphone',
+    name: '耳机',
+    emoji: '🎧',
+    moodEffect: { loneliness: 4, romance: 2 },
+    thoughtBubbles: ['♪ 沉浸在自己的世界', '这首曲子好适合现在', '音乐让飞行更轻盈'],
+  },
+  {
+    id: 'book',
+    name: '书本',
+    emoji: '📚',
+    moodEffect: { academic: 5, stress: 1 },
+    thoughtBubbles: ['知识就是力量！', '去图书馆坐坐吧', '今天学了好多'],
+  },
+  {
+    id: 'scarf',
+    name: '围巾',
+    emoji: '🧣',
+    moodEffect: { warmth: 5 },
+    thoughtBubbles: ['好暖和～', '冬天也不怕冷', '谢谢你的围巾！'],
+  },
+  {
+    id: 'camera',
+    name: '相机',
+    emoji: '📷',
+    moodEffect: {},
+    thoughtBubbles: ['咔嚓！记录这一刻', '今天拍了好多照片', '这个角度不错！'],
+  },
+  {
+    id: 'note',
+    name: '便利贴',
+    emoji: '💌',
+    moodEffect: { academic: 1, loneliness: 1 },
+    thoughtBubbles: ['咦，有张纸条...', '谁写的呢？', '上面写着什么...'],
+  },
+];
