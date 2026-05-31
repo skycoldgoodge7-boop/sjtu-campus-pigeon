@@ -467,29 +467,97 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
       set({ cloudReady: true });
 
-      // 订阅实时更新
-      sb()!.channel('pigeon-realtime')
-        .on('postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'pigeon_state', filter: 'id=eq.1' },
-          (payload: { new: DbPigeonState }) => {
-            const ps = payload.new;
-            if (ps) {
-              set({
-                currentLandmarkId: ps.current_landmark_id || get().currentLandmarkId,
-                pigeonActivity: (ps.pigeon_activity as PigeonActivity) || get().pigeonActivity,
-                stayUntil: ps.stay_until || get().stayUntil,
-                mood: ps.mood || get().mood,
-                totalFlights: ps.total_flights ?? get().totalFlights,
-                landmarkStayDurations: ps.landmark_stay_durations || get().landmarkStayDurations,
-                usedPhotoUrls: ps.used_photo_urls || get().usedPhotoUrls,
-                lastVisited: ps.last_visited || get().lastVisited,
-                lastActivityTimestamp: ps.last_tick_at || get().lastActivityTimestamp,
-                lastStayStartTime: ps.last_stay_start_time || get().lastStayStartTime,
-              });
-            }
+      // 订阅所有表的实时更新
+      const channel = sb()!.channel('pigeon-realtime');
+
+      // pigeon_state 更新 → 鸽子位置/情绪同步
+      channel.on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'pigeon_state', filter: 'id=eq.1' },
+        (payload: { new: DbPigeonState }) => {
+          const ps = payload.new;
+          if (ps) {
+            set({
+              currentLandmarkId: ps.current_landmark_id || get().currentLandmarkId,
+              pigeonActivity: (ps.pigeon_activity as PigeonActivity) || get().pigeonActivity,
+              stayUntil: ps.stay_until || get().stayUntil,
+              mood: ps.mood || get().mood,
+              totalFlights: ps.total_flights ?? get().totalFlights,
+              landmarkStayDurations: ps.landmark_stay_durations || get().landmarkStayDurations,
+              usedPhotoUrls: ps.used_photo_urls || get().usedPhotoUrls,
+              lastVisited: ps.last_visited || get().lastVisited,
+              lastActivityTimestamp: ps.last_tick_at || get().lastActivityTimestamp,
+              lastStayStartTime: ps.last_stay_start_time || get().lastStayStartTime,
+            });
           }
-        )
-        .subscribe();
+        }
+      );
+
+      // today_meta 更新 → 投喂计数等同步
+      channel.on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'today_meta', filter: 'id=eq.1' },
+        (payload: { new: DbTodayMeta }) => {
+          const tm = payload.new;
+          if (tm) {
+            set({
+              todayDate: tm.today_date || get().todayDate,
+              todayFeedCount: tm.today_feed_count ?? get().todayFeedCount,
+              todayLandmarksVisited: tm.today_landmarks_visited || get().todayLandmarksVisited,
+              todayEncounters: tm.today_encounters || get().todayEncounters,
+              characterTraces: tm.character_traces || get().characterTraces,
+              moodStreaks: tm.mood_streaks || get().moodStreaks,
+            });
+          }
+        }
+      );
+
+      // feed_totals 更新 → 投喂统计同步
+      channel.on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'feed_totals' },
+        (payload: { new: DbFeedTotal }) => {
+          const ft = payload.new;
+          if (ft) {
+            set((s) => {
+              const feedTotals = { ...s.feedTotals, [ft.item_id]: ft.count };
+              const todayFeedTotals = { ...s.todayFeedTotals, [ft.item_id]: ft.today_count };
+              return { feedTotals, todayFeedTotals };
+            });
+          }
+        }
+      );
+
+      // messages 更新（INSERT/UPDATE）→ 漂流瓶实时同步
+      channel.on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload: { new: DbMessage }) => {
+          const m = payload.new;
+          if (m) {
+            set((s) => ({
+              messages: [{
+                id: m.id, text: m.text, emoji: m.emoji,
+                status: m.status as DriftBottle['status'],
+                timestamp: m.timestamp, pickedByPigeon: m.picked_by_pigeon,
+              }, ...s.messages].slice(0, 100),
+            }));
+          }
+        }
+      );
+      channel.on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload: { new: DbMessage }) => {
+          const m = payload.new;
+          if (m) {
+            set((s) => ({
+              messages: s.messages.map((msg) =>
+                msg.id === m.id
+                  ? { ...msg, status: m.status as DriftBottle['status'], pickedByPigeon: m.picked_by_pigeon }
+                  : msg
+              ),
+            }));
+          }
+        }
+      );
+
+      channel.subscribe();
     } catch {
       // Supabase 失败，回退 localStorage
       const local = loadLocalState();
