@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePigeonStore } from '../store/pigeonStore';
 import { useUIStore } from '../store/uiStore';
-import type { DriftBottle } from '../types';
+import type { DriftBottle, PhotoCard } from '../types';
+import { haptic } from '../utils/haptic';
 import DailyJournal from './DailyJournal';
 import ObservationArchive from './ObservationArchive';
 import StatsDashboard from './StatsDashboard';
@@ -26,15 +27,15 @@ export default function SidePanel() {
       <button
         onPointerDown={(e) => { e.stopPropagation(); toggleSidePanel(); }}
         style={{
-          position: 'fixed', right: open ? 'min(35vw, 420px)' : 0, top: '40%',
+          position: 'absolute', right: open ? 'min(90vw, 420px)' : 0, top: '40%',
           zIndex: 21,
-          width: 36, height: 72,
-          borderRadius: '18px 0 0 18px',
+          width: 40, height: 80,
+          borderRadius: '20px 0 0 20px',
           border: 'none',
-          background: 'rgba(255,255,255,0.5)',
+          background: 'rgba(255,255,255,0.6)',
           backdropFilter: 'blur(10px)',
           cursor: 'pointer',
-          fontSize: 16,
+          fontSize: 18,
           transition: 'right 0.35s ease',
           boxShadow: '-1px 0 8px rgba(0,0,0,0.08)',
           color: '#4A3728',
@@ -45,11 +46,11 @@ export default function SidePanel() {
 
       {/* Panel */}
       <div style={{
-        position: 'fixed', right: open ? 0 : 'min(-35vw, -420px)',
+        position: 'absolute', right: open ? 0 : 'min(-90vw, -420px)',
         top: 0, bottom: 0,
-        width: 'min(35vw, 420px)',
+        width: 'min(90vw, 420px)',
         zIndex: 20,
-        background: 'rgba(255,255,255,0.88)',
+        background: 'rgba(255,255,255,0.92)',
         backdropFilter: 'blur(20px)',
         boxShadow: '-4px 0 24px rgba(0,0,0,0.12)',
         transition: 'right 0.35s ease',
@@ -65,15 +66,16 @@ export default function SidePanel() {
             <button key={t.id}
               onPointerDown={() => setSidePanelTab(t.id)}
               style={{
-                flex: 1, border: 'none',
-                background: tab === t.id ? 'rgba(139,0,0,0.06)' : 'transparent',
+                flex: 1, border: 'none', minWidth: 0,
+                background: tab === t.id ? 'rgba(196,119,107,0.08)' : 'transparent',
                 borderRadius: '12px 12px 0 0',
-                padding: '10px 6px',
+                padding: '8px 2px',
                 cursor: 'pointer',
-                fontSize: 'clamp(12px, 1vw, 15px)',
+                fontSize: 'clamp(10px, 1vw, 15px)',
                 fontWeight: tab === t.id ? 700 : 400,
-                color: tab === t.id ? '#8B0000' : '#8B7355',
-                transition: 'all 0.2s ease',
+                color: tab === t.id ? '#C4776B' : '#8B7355',
+                transition: 'all 0.25s var(--ease-in-out-soft)',
+                whiteSpace: 'nowrap',
               }}
             >
               {t.emoji} {t.label}
@@ -82,7 +84,7 @@ export default function SidePanel() {
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
           {tab === 'photos' && <PhotoWall />}
           {tab === 'observe' && <ObservationArchive />}
           {tab === 'journal' && <DailyJournal />}
@@ -97,6 +99,7 @@ export default function SidePanel() {
 // ====== Photo Wall (每日照片) ======
 function PhotoWall() {
   const dailyPhotos = usePigeonStore((s) => s.dailyPhotos);
+  const [viewingPhoto, setViewingPhoto] = useState<PhotoCard | null>(null);
 
   if (dailyPhotos.length === 0) {
     return (
@@ -107,8 +110,8 @@ function PhotoWall() {
       }}>
         <div style={{ fontSize: 'clamp(28px, 2.5vw, 44px)', marginBottom: 12 }}>📷</div>
         <div>还没有每日照片</div>
-        <div style={{ fontSize: '0.85em', opacity: 0.7 }}>每天凌晨会根据鸽子</div>
-        <div style={{ fontSize: '0.85em', opacity: 0.7 }}>待得最久的地方生成一张</div>
+        <div style={{ fontSize: '0.85em', opacity: 0.7 }}>每天凌晨会在校园随机角落</div>
+        <div style={{ fontSize: '0.85em', opacity: 0.7 }}>留下一张照片记忆</div>
       </div>
     );
   }
@@ -121,7 +124,11 @@ function PhotoWall() {
           fontSize: 'clamp(11px, 0.9vw, 13px)',
           fontWeight: 600, color: '#8B7355', marginBottom: 8,
         }}>
-          今日照片
+          {(() => {
+            const d = dailyPhotos[0];
+            const dl = d.id.replace('daily-photo-', '');
+            return `📷 ${dl} 校园记录`;
+          })()}
         </div>
         {(() => {
           const p = dailyPhotos[0];
@@ -157,7 +164,10 @@ function PhotoWall() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 'clamp(36px, 3vw, 56px)',
                 overflow: 'hidden',
-              }}>
+                cursor: p.photoUrl ? 'pointer' : 'default',
+              }}
+                onPointerDown={() => { if (p.photoUrl) setViewingPhoto(p); }}
+              >
                 {p.photoUrl ? (
                   <img src={p.photoUrl} alt={p.caption}
                     style={{
@@ -237,7 +247,10 @@ function PhotoWall() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: 'clamp(24px, 2.5vw, 40px)',
                     overflow: 'hidden',
-                  }}>
+                    cursor: p.photoUrl ? 'pointer' : 'default',
+                  }}
+                    onPointerDown={() => { if (p.photoUrl) setViewingPhoto(p); }}
+                  >
                     {p.photoUrl ? (
                       <img src={p.photoUrl} alt={p.caption}
                         style={{
@@ -273,6 +286,47 @@ function PhotoWall() {
           </div>
         </div>
       )}
+
+      {/* Photo viewer modal */}
+      {viewingPhoto && viewingPhoto.photoUrl && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 100,
+          background: 'rgba(0,0,0,0.92)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+        }}
+          onPointerDown={() => setViewingPhoto(null)}
+        >
+          <img src={viewingPhoto.photoUrl} alt={viewingPhoto.caption}
+            style={{
+              maxWidth: '95vw', maxHeight: '70vh',
+              objectFit: 'contain', borderRadius: 8,
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          />
+          <div style={{ color: '#fff', marginTop: 16, textAlign: 'center', padding: '0 24px' }}>
+            <div style={{ fontSize: 'clamp(12px, 1.2vw, 16px)', marginBottom: 4 }}>
+              {viewingPhoto.landmarkEmoji} {viewingPhoto.landmarkName}
+            </div>
+            <div style={{ fontSize: 'clamp(10px, 0.9vw, 13px)', opacity: 0.65 }}>
+              {viewingPhoto.caption}
+            </div>
+          </div>
+          <a href={viewingPhoto.photoUrl} download
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              marginTop: 14, padding: '10px 28px',
+              background: 'rgba(255,255,255,0.15)',
+              borderRadius: 12, color: '#fff',
+              textDecoration: 'none',
+              fontSize: 'clamp(12px, 1vw, 15px)',
+              fontWeight: 600,
+            }}
+          >
+            💾 保存图片
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -282,6 +336,7 @@ function MessageStream() {
   const messages = usePigeonStore((s) => s.messages);
   const postMessage = usePigeonStore((s) => s.postMessage);
   const retrieveBottle = usePigeonStore((s) => s.retrieveBottle);
+  const lastBottleReply = usePigeonStore((s) => s.lastBottleReply);
   const [text, setText] = useState('');
   const [emoji, setEmoji] = useState('💌');
   const lastPostRef = useRef(0);
@@ -290,13 +345,23 @@ function MessageStream() {
   // Bottle retrieve state
   const [retrievedBottle, setRetrievedBottle] = useState<DriftBottle | null>(null);
   const [revealBottle, setRevealBottle] = useState(false);
+  const [showReply, setShowReply] = useState(false);
 
   const EMOJIS = ['💌', '❤️', '😊', '📝', '🍀', '🌟', '💪', '🕊️', '🌸', '🎓', '☕', '🍞'];
+
+  // 监听鸽子的回复
+  useEffect(() => {
+    if (lastBottleReply && retrievedBottle && lastBottleReply.noteText === retrievedBottle.text) {
+      const t = setTimeout(() => setShowReply(true), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [lastBottleReply, retrievedBottle]);
 
   const handleSend = () => {
     if (!text.trim()) return;
     if (Date.now() - lastPostRef.current < 30000) return;
     lastPostRef.current = Date.now();
+    haptic('send');
     postMessage(emoji, text);
     setText('');
   };
@@ -304,6 +369,8 @@ function MessageStream() {
   const handleRetrieve = () => {
     if (Date.now() - lastRetrieveRef.current < 30000) return;
     lastRetrieveRef.current = Date.now();
+    haptic('retrieve');
+    setShowReply(false);
     const bottle = retrieveBottle();
     if (bottle) {
       setRetrievedBottle(bottle);
@@ -364,7 +431,7 @@ function MessageStream() {
             background: 'linear-gradient(135deg, #FFF8E7, #FFF0D0)',
             borderRadius: 14,
             padding: '16px 18px',
-            border: '1px solid rgba(139,0,0,0.1)',
+            border: '1px solid rgba(196,119,107,0.1)',
             boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
             animation: 'fadeInUp 0.5s ease both',
             position: 'relative',
@@ -375,7 +442,7 @@ function MessageStream() {
               width: 0, height: 0,
               borderStyle: 'solid',
               borderWidth: '0 20px 20px 0',
-              borderColor: 'transparent rgba(139,0,0,0.08) transparent transparent',
+              borderColor: 'transparent rgba(196,119,107,0.08) transparent transparent',
               borderRadius: '0 14px 0 0',
             }} />
             <div style={{
@@ -405,6 +472,27 @@ function MessageStream() {
             }}>
               {revealBottle ? '—— 漂流中的纸条' : '纸条正在展开...'}
             </div>
+
+            {/* 鸽子回复 */}
+            {showReply && lastBottleReply && (
+              <div style={{
+                marginTop: 12, padding: '12px 16px',
+                background: 'rgba(196,119,107,0.08)',
+                borderRadius: 12,
+                border: '1px solid rgba(196,119,107,0.15)',
+                animation: 'fadeInUp 0.5s ease both',
+              }}>
+                <div style={{ fontSize: 'clamp(10px, 0.8vw, 12px)', color: '#C4776B', fontWeight: 600, marginBottom: 4 }}>
+                  🕊️ 鸽子回复了这张纸条：
+                </div>
+                <div style={{
+                  fontSize: 'clamp(13px, 1.1vw, 16px)', color: '#4A3728',
+                  lineHeight: 1.7, fontWeight: 500,
+                }}>
+                  「{lastBottleReply.reply}」
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -423,7 +511,7 @@ function MessageStream() {
           const timeStr = mins < 1 ? '刚刚' : mins < 60 ? `${mins}分钟前` : `${Math.floor(mins / 60)}小时前`;
           return (
             <div key={m.id} style={{
-              background: 'rgba(139,0,0,0.03)', borderRadius: 12, padding: '10px 14px',
+              background: 'rgba(196,119,107,0.05)', borderRadius: 12, padding: '10px 14px',
               marginBottom: 8, fontSize: 'clamp(11px, 0.9vw, 14px)', color: '#4A3728',
               opacity: m.pickedByPigeon ? 0.5 : 1,
             }}>
@@ -439,43 +527,50 @@ function MessageStream() {
       </div>
 
       {/* Compose */}
-      <div style={{ borderTop: '1px solid rgba(0,0,0,0.06)', padding: '10px 12px' }}>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div style={{
+        borderTop: '1px solid rgba(0,0,0,0.06)',
+        padding: '10px 12px calc(12px + env(safe-area-inset-bottom, 20px))',
+      }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           {EMOJIS.map((e) => (
             <button key={e} onPointerDown={() => setEmoji(e)} style={{
-              border: emoji === e ? '2px solid #8B0000' : '2px solid transparent',
-              background: 'transparent', borderRadius: 8, fontSize: 'clamp(16px, 1.5vw, 22px)',
-              cursor: 'pointer', padding: 2,
+              border: emoji === e ? '2px solid #C4776B' : '2px solid transparent',
+              background: 'transparent', borderRadius: 8,
+              fontSize: 'clamp(20px, 3vw, 26px)',
+              cursor: 'pointer', padding: '4px 2px',
+              lineHeight: 1,
             }}>{e}</button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input
             value={text}
             onChange={(e) => setText(e.target.value.slice(0, 30))}
-            placeholder="留一句话，不超过30字..."
+            placeholder="说点什么..."
             maxLength={30}
             style={{
-              flex: 1, border: '1px solid rgba(0,0,0,0.1)', borderRadius: 10,
-              padding: '8px 12px', fontSize: 'clamp(12px, 1vw, 15px)',
-              outline: 'none', background: 'rgba(255,255,255,0.5)',
+              flex: 1, minWidth: 0,
+              border: '1px solid rgba(0,0,0,0.12)', borderRadius: 12,
+              padding: '12px 14px', fontSize: '15px',
+              outline: 'none', background: 'rgba(255,255,255,0.6)',
               fontFamily: 'inherit',
             }}
             onKeyDown={(e) => { if (e.key === 'Enter') handleSend(); }}
           />
           <button onPointerDown={handleSend} style={{
-            border: 'none', borderRadius: 10,
-            background: 'linear-gradient(135deg, #8B0000, #C41E3A)',
-            color: 'white', padding: '8px 16px', cursor: 'pointer',
-            fontWeight: 600, fontSize: 'clamp(12px, 1vw, 15px)',
-            whiteSpace: 'nowrap',
+            border: 'none', borderRadius: 12,
+            background: 'linear-gradient(135deg, #C4776B, #D4947E)',
+            color: 'white', padding: '12px 20px', cursor: 'pointer',
+            fontWeight: 700, fontSize: '15px',
+            whiteSpace: 'nowrap', flexShrink: 0,
+            transition: 'all 0.2s var(--ease-out-expo)',
           }}>
             扔出
           </button>
         </div>
         <div style={{
-          textAlign: 'center', fontSize: 'clamp(9px, 0.7vw, 11px)',
-          color: '#8B7355', marginTop: 6, opacity: 0.7,
+          textAlign: 'center', fontSize: '11px',
+          color: '#8B7355', marginTop: 6, opacity: 0.6,
         }}>
           匿名留言 · 30秒间隔
         </div>

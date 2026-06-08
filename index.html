@@ -10,13 +10,34 @@
     <meta name="apple-mobile-web-app-title" content="校园鸽" />
     <link rel="manifest" href="./manifest.json" />
     <title>交大鸽子共享计划</title>
+    <style>
+      /* 平板全屏时底部安全区 */
+      @supports(padding: env(safe-area-inset-bottom)) {
+        body { padding-bottom: env(safe-area-inset-bottom); }
+      }
+    </style>
     <script>
-      // Register service worker for offline support
+      // 防息屏：请求屏幕常亮（平板关键功能）
+      let wakeLock = null;
+      async function requestWakeLock() {
+        try {
+          if ('wakeLock' in navigator) {
+            wakeLock = await navigator.wakeLock.request('screen');
+          }
+        } catch {}
+      }
+      // 页面可见性变化时重新请求
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') requestWakeLock();
+      });
+      requestWakeLock();
+
+      // Service Worker
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('./sw.js', { scope: './' })
             .then(() => console.log('🕊️ SW registered'))
-            .catch(() => console.log('SW skipped — offline mode unavailable'));
+            .catch(() => {});
         });
       }
     </script>

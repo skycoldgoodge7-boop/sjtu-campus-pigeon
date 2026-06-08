@@ -1,10 +1,25 @@
 import { useRef, useState } from 'react';
+import { isSupabaseConfigured } from '../lib/supabase';
+import { usePigeonStore } from '../store/pigeonStore';
 
 export default function DataManager() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pendingDataRef = useRef<string | null>(null);
+  const [keyInput, setKeyInput] = useState('');
+  const [showKeyInput, setShowKeyInput] = useState(false);
+  const currentKey = usePigeonStore((s) => s.zhipuApiKey);
+  const setApiKey = usePigeonStore((s) => s.setApiKey);
+
+  const handleSetKey = () => {
+    const trimmed = keyInput.trim();
+    if (!trimmed) return;
+    setApiKey(trimmed);
+    setKeyInput('');
+    setStatusMsg('✅ API Key 已保存（仅本地）');
+    setTimeout(() => setStatusMsg(null), 3000);
+  };
 
   const handleExport = () => {
     try {
@@ -142,9 +157,9 @@ export default function DataManager() {
         <button
           onPointerDown={handleExport}
           style={{
-            flex: 1, border: '1px solid rgba(139,0,0,0.15)',
+            flex: 1, border: '1px solid rgba(196,119,107,0.18)',
             borderRadius: 14, padding: '12px 16px',
-            background: 'rgba(139,0,0,0.03)',
+            background: 'rgba(196,119,107,0.05)',
             cursor: 'pointer',
             fontSize: 'clamp(12px, 1vw, 15px)',
             fontWeight: 600, color: '#4A3728',
@@ -156,9 +171,9 @@ export default function DataManager() {
         <button
           onPointerDown={() => fileInputRef.current?.click()}
           style={{
-            flex: 1, border: '1px solid rgba(139,0,0,0.15)',
+            flex: 1, border: '1px solid rgba(196,119,107,0.18)',
             borderRadius: 14, padding: '12px 16px',
-            background: 'rgba(139,0,0,0.03)',
+            background: 'rgba(196,119,107,0.05)',
             cursor: 'pointer',
             fontSize: 'clamp(12px, 1vw, 15px)',
             fontWeight: 600, color: '#4A3728',
@@ -176,6 +191,53 @@ export default function DataManager() {
         />
       </div>
 
+        {/* API Key 设置（仅本地存储） */}
+      <div style={{ marginTop: 10 }}>
+        <div
+          onPointerDown={() => setShowKeyInput(!showKeyInput)}
+          style={{
+            fontSize: 'clamp(10px, 0.8vw, 12px)',
+            color: '#8B7355', opacity: 0.5, cursor: 'pointer',
+            textAlign: 'center', userSelect: 'none',
+          }}
+        >
+          {showKeyInput ? '收起' : '⚙️ AI 密钥设置'}
+        </div>
+        {showKeyInput && (
+          <div style={{
+            display: 'flex', gap: 6, marginTop: 8,
+            animation: 'fadeInUp 0.3s ease',
+          }}>
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSetKey()}
+              placeholder={currentKey ? '已设置 ✅  输入新 key 替换' : '粘贴智谱 API Key'}
+              style={{
+                flex: 1, border: '1px solid rgba(196,119,107,0.18)',
+                borderRadius: 12, padding: '10px 12px',
+                background: 'rgba(255,252,245,0.8)',
+                fontSize: 'clamp(11px, 0.9vw, 13px)',
+                color: '#4A3728', outline: 'none',
+              }}
+            />
+            <button
+              onPointerDown={handleSetKey}
+              style={{
+                border: 'none', borderRadius: 12, padding: '10px 16px',
+                background: 'linear-gradient(135deg, #C4776B, #D4947E)',
+                color: 'white', cursor: 'pointer',
+                fontSize: 'clamp(11px, 0.9vw, 13px)',
+                fontWeight: 600, whiteSpace: 'nowrap',
+              }}
+            >
+              保存
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Status message */}
       {statusMsg && (
         <div style={{
@@ -183,7 +245,7 @@ export default function DataManager() {
           fontSize: 'clamp(10px, 0.8vw, 13px)',
           color: '#4A3728', fontWeight: 500,
           padding: '8px 12px',
-          background: 'rgba(139,0,0,0.04)',
+          background: 'rgba(196,119,107,0.06)',
           borderRadius: 10,
           animation: 'fadeInUp 0.3s ease',
         }}>
@@ -196,9 +258,9 @@ export default function DataManager() {
         <div style={{
           marginTop: 12,
           padding: '16px',
-          background: 'rgba(139,0,0,0.05)',
+          background: 'rgba(196,119,107,0.07)',
           borderRadius: 14,
-          border: '1px solid rgba(139,0,0,0.1)',
+          border: '1px solid rgba(196,119,107,0.12)',
           animation: 'fadeInUp 0.3s ease',
         }}>
           <div style={{
@@ -217,7 +279,7 @@ export default function DataManager() {
             <button
               onPointerDown={() => { setShowConfirm(false); pendingDataRef.current = null; }}
               style={{
-                flex: 1, border: '1px solid rgba(139,0,0,0.15)',
+                flex: 1, border: '1px solid rgba(196,119,107,0.18)',
                 borderRadius: 10, padding: '8px',
                 background: 'transparent', cursor: 'pointer',
                 fontSize: 'clamp(11px, 0.9vw, 14px)',
@@ -231,7 +293,7 @@ export default function DataManager() {
               style={{
                 flex: 1, border: 'none',
                 borderRadius: 10, padding: '8px',
-                background: 'linear-gradient(135deg, #8B0000, #C41E3A)',
+                background: 'linear-gradient(135deg, #C4776B, #D4947E)',
                 cursor: 'pointer', color: 'white',
                 fontSize: 'clamp(11px, 0.9vw, 14px)',
                 fontWeight: 600,
@@ -249,7 +311,9 @@ export default function DataManager() {
         color: '#8B7355', opacity: 0.5, textAlign: 'center',
         lineHeight: 1.6,
       }}>
-        建议定期导出备份。清除浏览器缓存会导致数据丢失。
+        {isSupabaseConfigured()
+          ? '✅ 数据已自动备份到云端，换设备登录即可恢复。'
+          : '⚠️ 数据仅存储在本地浏览器。清除缓存会导致数据丢失，建议定期导出备份。'}
       </div>
     </div>
   );

@@ -1,78 +1,66 @@
+// 地图图例栏 — 单层居中横向排列
+// 17:27 · 📍思源湖 · 🌆傍晚 · 🎓毕业季
 import { useUIStore } from '../store/uiStore';
+import { usePigeonStore } from '../store/pigeonStore';
+import { landmarks } from '../data/landmarks';
 import { useState, useEffect } from 'react';
 import type { TimeOfDay } from '../types';
 
-const STATE_LABELS: Record<string, { emoji: string; label: string }> = {
-  exam: { emoji: '📚', label: '考试季' },
-  spring: { emoji: '🌸', label: '春日' },
-  graduation: { emoji: '🎓', label: '毕业季' },
-  normal: { emoji: '🏫', label: '交大' },
+const TIME_LABELS: Record<TimeOfDay, { name: string; emoji: string }> = {
+  dawn: { name: '清晨', emoji: '🌅' }, morning: { name: '上午', emoji: '☀️' },
+  afternoon: { name: '午后', emoji: '🌤️' }, evening: { name: '傍晚', emoji: '🌇' },
+  night: { name: '深夜', emoji: '🌙' },
 };
-
-const TIME_DESCRIPTIONS: Record<TimeOfDay, string> = {
-  dawn: '清晨',
-  morning: '上午',
-  afternoon: '午后',
-  evening: '傍晚',
-  night: '深夜',
+const STATE_LABELS: Record<string, { name: string; emoji: string }> = {
+  exam: { name: '考试季', emoji: '📚' }, spring: { name: '春日', emoji: '🌸' },
+  graduation: { name: '毕业季', emoji: '🎓' }, normal: { name: '', emoji: '' },
 };
 
 export default function InfoBar() {
-  const campusState = useUIStore((s) => s.campusState);
   const timeOfDay = useUIStore((s) => s.timeOfDay);
+  const campusState = useUIStore((s) => s.campusState);
+  const currentLandmarkId = usePigeonStore((s) => s.currentLandmarkId);
+  const weatherData = usePigeonStore((s) => s.weatherData);
   const [time, setTime] = useState(new Date());
+  useEffect(() => { const i = setInterval(() => setTime(new Date()), 30000); return () => clearInterval(i); }, []);
 
-  useEffect(() => {
-    const interval = setInterval(() => setTime(new Date()), 30000);
-    return () => clearInterval(interval);
-  }, []);
-
+  const ti = TIME_LABELS[timeOfDay];
   const st = STATE_LABELS[campusState];
-  const timeStr = time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  const timeDesc = TIME_DESCRIPTIONS[timeOfDay];
+  const timeStr = time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const lm = landmarks.find((l) => l.id === currentLandmarkId);
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10,
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: 'clamp(8px, 1.5vh, 16px) clamp(16px, 2vw, 40px)',
+      position: 'absolute', top: 12, left: 20, right: 20, zIndex: 10,
       pointerEvents: 'none',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      height: 48,
+      background: 'rgba(248,244,234,0.75)',
+      backdropFilter: 'blur(10px)',
+      borderRadius: 24,
+      border: '1px solid rgba(138,104,75,0.08)',
+      padding: '0 18px',
+      gap: 10,
     }}>
-      {/* Campus state badge */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        background: 'rgba(255,255,255,0.7)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: 20, padding: '6px 16px',
-        fontSize: 'clamp(12px, 1.1vw, 16px)',
-        fontWeight: 600, color: '#4A3728',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-      }}>
-        <span>{st.emoji}</span>
-        <span>{st.label}</span>
-      </div>
-
-      {/* Clock */}
-      <div style={{
-        fontSize: 'clamp(28px, 5vw, 64px)',
-        fontWeight: 800,
-        color: 'rgba(255,255,255,0.9)',
-        textShadow: '0 2px 12px rgba(0,0,0,0.2)',
-        letterSpacing: 4,
-      }}>{timeStr}</div>
-
-      {/* Time description */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        background: 'rgba(255,255,255,0.7)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: 20, padding: '6px 16px',
-        fontSize: 'clamp(12px, 1.1vw, 16px)',
-        fontWeight: 600, color: '#4A3728',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-      }}>
-        <span>{timeDesc}</span>
-      </div>
+      <span style={{ fontSize: 20, fontWeight: 700, color: '#5D4632', letterSpacing: 1 }}>{timeStr}</span>
+      <span style={{ color: 'rgba(111,101,90,0.3)', fontSize: 11 }}>·</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: '#6F655A' }}>📍{lm?.name || '校园'}</span>
+      <span style={{ color: 'rgba(111,101,90,0.3)', fontSize: 11 }}>·</span>
+      <span style={{ fontSize: 13, fontWeight: 500, color: '#6F655A' }}>{ti.emoji}{ti.name}</span>
+      {st.name && (
+        <>
+          <span style={{ color: 'rgba(111,101,90,0.3)', fontSize: 11 }}>·</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: '#6F655A' }}>{st.emoji}{st.name}</span>
+        </>
+      )}
+      {weatherData && (
+        <>
+          <span style={{ color: 'rgba(111,101,90,0.3)', fontSize: 11 }}>·</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: '#6F655A' }}>
+            {weatherData.emoji} {weatherData.label} {Math.round(weatherData.temperature)}°C
+          </span>
+        </>
+      )}
     </div>
   );
 }

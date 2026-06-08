@@ -7,6 +7,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🥐',
     moodEffect: { warmth: 5, social: 1 },
     thoughtBubbles: ['好香的面包！', '最喜欢面包屑了～', '咕咕，谢谢！'],
+    reactions: [
+      '它啄了啄面包屑。',
+      '低下头认真吃了起来。',
+      '吃完在地上蹭了蹭嘴。',
+    ],
   },
   {
     id: 'coffee',
@@ -14,6 +19,11 @@ export const feedItems: FeedItem[] = [
     emoji: '☕',
     moodEffect: { energy: 5, academic: 3, stress: 2 },
     thoughtBubbles: ['今晚不睡了！', '图书馆见！', '好苦...但是提神'],
+    reactions: [
+      '它闻了闻咖啡。眼睛亮了一点。',
+      '它小心翼翼地啄了一口。然后抖了抖翅膀。',
+      '咖啡的香气让它站直了一点。',
+    ],
   },
   {
     id: 'milkTea',
@@ -21,6 +31,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🧋',
     moodEffect: { social: 5, warmth: 3 },
     thoughtBubbles: ['甜甜的真好喝！', '想去人多的地方～', '今天心情不错！'],
+    reactions: [
+      '它凑近吸管看了看。',
+      '甜甜的味道让它晃了晃尾巴。',
+      '它抬起头，好像在笑。',
+    ],
   },
   {
     id: 'noodles',
@@ -28,6 +43,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🍜',
     moodEffect: { loneliness: 5, stress: 3 },
     thoughtBubbles: ['夜深了...', '一个人也挺好的', '闻到泡面味了'],
+    reactions: [
+      '它站在泡面旁，安静地看了一会儿。',
+      '热气模糊了它的羽毛。',
+      '深夜里，两个独处的灵魂。',
+    ],
   },
   {
     id: 'fries',
@@ -35,6 +55,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🍟',
     moodEffect: { slack: 6, social: 1 },
     thoughtBubbles: ['好悠闲啊～', '今天不想飞了', '躺着真舒服...'],
+    reactions: [
+      '它叼起一根薯条。然后就躺下了。',
+      '慢慢啄着薯条，看起来完全不想动。',
+      '吃完往旁边一歪——摊成了一张鸽子饼。',
+    ],
   },
   {
     id: 'flower',
@@ -42,6 +67,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🌸',
     moodEffect: { romance: 5, warmth: 3 },
     thoughtBubbles: ['好美的花！', '春天来了吗？', '想去花园看看'],
+    reactions: [
+      '它把花叼走了。看起来开心了一点。',
+      '绕着花转了一圈，然后轻轻碰了碰花瓣。',
+      '它把花放在自己旁边。就这么看着。',
+    ],
   },
   {
     id: 'umbrella',
@@ -49,6 +79,11 @@ export const feedItems: FeedItem[] = [
     emoji: '☂️',
     moodEffect: { warmth: 4 },
     thoughtBubbles: ['下雨也不怕！', '有伞真好～', '躲在屋檐下也不错'],
+    reactions: [
+      '它用翅膀碰了碰伞柄。撑开了。',
+      '它钻到伞下面待了一会儿。',
+      '它抬起头看了看伞。好像在说谢谢。',
+    ],
   },
   {
     id: 'headphone',
@@ -56,6 +91,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🎧',
     moodEffect: { loneliness: 4, romance: 2 },
     thoughtBubbles: ['♪ 沉浸在自己的世界', '这首曲子好适合现在', '音乐让飞行更轻盈'],
+    reactions: [
+      '它歪着头，好像真的在听什么。',
+      '音乐让它安静了下来。',
+      '它闭了一会儿眼睛。可能在感受节奏。',
+    ],
   },
   {
     id: 'book',
@@ -63,6 +103,11 @@ export const feedItems: FeedItem[] = [
     emoji: '📚',
     moodEffect: { academic: 5, stress: 1 },
     thoughtBubbles: ['知识就是力量！', '去图书馆坐坐吧', '今天学了好多'],
+    reactions: [
+      '它站在书上。盯着字看了很久。',
+      '翻页的声音让它歪了歪头。',
+      '它蹲在打开的书页旁。好像在学习。',
+    ],
   },
   {
     id: 'scarf',
@@ -70,6 +115,11 @@ export const feedItems: FeedItem[] = [
     emoji: '🧣',
     moodEffect: { warmth: 5 },
     thoughtBubbles: ['好暖和～', '冬天也不怕冷', '谢谢你的围巾！'],
+    reactions: [
+      '围巾松松地搭在它身上。看起来很暖。',
+      '它把脸埋进围巾里。',
+      '它看了看围巾，又看了看你。',
+    ],
   },
   {
     id: 'camera',
@@ -77,6 +127,11 @@ export const feedItems: FeedItem[] = [
     emoji: '📷',
     moodEffect: {},
     thoughtBubbles: ['咔嚓！记录这一刻', '今天拍了好多照片', '这个角度不错！'],
+    reactions: [
+      '它盯着镜头看了好一会儿。',
+      '快门响了一下。它吓了一跳，又凑近看了看。',
+      '它把相机推到一边。摆在了一个更好看的角度。',
+    ],
   },
   {
     id: 'note',
@@ -84,5 +139,10 @@ export const feedItems: FeedItem[] = [
     emoji: '💌',
     moodEffect: { academic: 1, loneliness: 1 },
     thoughtBubbles: ['咦，有张纸条...', '谁写的呢？', '上面写着什么...'],
+    reactions: [
+      '它低头看了看纸条上的字。',
+      '它把纸条叼到了窗台上。',
+      '纸条被它折了折角。好像被认真读过了。',
+    ],
   },
 ];

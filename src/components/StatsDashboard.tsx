@@ -123,11 +123,11 @@ export default function StatsDashboard() {
       }}>
         {statCards.map((card, i) => (
           <div key={card.label} style={{
-            background: 'rgba(139,0,0,0.03)',
+            background: 'rgba(196,119,107,0.05)',
             borderRadius: 16, padding: '16px 14px',
             textAlign: 'center',
             animation: `fadeInUp 0.5s ease ${i * 0.06}s both`,
-            border: '1px solid rgba(139,0,0,0.06)',
+            border: '1px solid rgba(196,119,107,0.08)',
           }}>
             <div style={{ fontSize: 'clamp(24px, 2.5vw, 40px)', marginBottom: 4 }}>
               {card.emoji}
@@ -169,8 +169,8 @@ export default function StatsDashboard() {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '12px 14px',
-              background: 'rgba(139,0,0,0.03)', borderRadius: 14,
-              border: '1px solid rgba(139,0,0,0.05)',
+              background: 'rgba(196,119,107,0.05)', borderRadius: 14,
+              border: '1px solid rgba(196,119,107,0.07)',
             }}>
               <span style={{ fontSize: 'clamp(28px, 2.5vw, 40px)' }}>
                 {stats.favFood.emoji}
@@ -198,8 +198,8 @@ export default function StatsDashboard() {
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '12px 14px',
-              background: 'rgba(139,0,0,0.03)', borderRadius: 14,
-              border: '1px solid rgba(139,0,0,0.05)',
+              background: 'rgba(196,119,107,0.05)', borderRadius: 14,
+              border: '1px solid rgba(196,119,107,0.07)',
             }}>
               <span style={{ fontSize: 'clamp(28px, 2.5vw, 40px)' }}>
                 {stats.favLandmark.emoji}
@@ -234,9 +234,9 @@ export default function StatsDashboard() {
         </div>
         <div style={{
           display: 'flex', flexDirection: 'column', gap: 5,
-          background: 'rgba(139,0,0,0.02)',
+          background: 'rgba(196,119,107,0.035)',
           borderRadius: 16, padding: '14px',
-          border: '1px solid rgba(139,0,0,0.05)',
+          border: '1px solid rgba(196,119,107,0.07)',
         }}>
           {MOOD_DIMENSIONS.map((dim) => {
             const val = mood[dim.key] || 50;
@@ -259,7 +259,7 @@ export default function StatsDashboard() {
                 </span>
                 <div style={{
                   flex: 1, height: 6,
-                  background: 'rgba(139,0,0,0.06)',
+                  background: 'rgba(196,119,107,0.08)',
                   borderRadius: 3, overflow: 'hidden',
                 }}>
                   <div style={{
@@ -306,9 +306,9 @@ export default function StatsDashboard() {
         </div>
         <div style={{
           display: 'flex', gap: 8, flexWrap: 'wrap',
-          background: 'rgba(139,0,0,0.02)',
+          background: 'rgba(196,119,107,0.035)',
           borderRadius: 16, padding: '14px',
-          border: '1px solid rgba(139,0,0,0.05)',
+          border: '1px solid rgba(196,119,107,0.07)',
         }}>
           {(Object.entries(moodStreaks) as [string, number][]).map(([dim, days]) => {
             const info = MOOD_DIMENSIONS.find((d) => d.key === dim);
@@ -363,8 +363,8 @@ export default function StatsDashboard() {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 16,
             padding: '14px 18px',
-            background: 'rgba(139,0,0,0.03)', borderRadius: 14,
-            border: '1px solid rgba(139,0,0,0.05)',
+            background: 'rgba(196,119,107,0.05)', borderRadius: 14,
+            border: '1px solid rgba(196,119,107,0.07)',
           }}>
             <div style={{ fontSize: 'clamp(32px, 3vw, 48px)' }}>📖</div>
             <div>

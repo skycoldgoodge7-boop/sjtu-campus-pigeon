@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import type { TimeOfDay, CampusState, PigeonBubble } from '../types';
 import { getTimeOfDay, getCampusState, usePigeonStore } from './pigeonStore';
 
+export type AppScreen = 'home' | 'map';
+
 interface UIState {
+  currentScreen: AppScreen;
+  bottomSheet: 'journal' | 'newspaper' | 'collection' | 'mailbox' | string | null;
   feedDockExpanded: boolean;
   sidePanelOpen: boolean;
   sidePanelTab: 'photos' | 'messages' | 'mood' | 'journal' | 'observe' | 'stats';
@@ -14,6 +18,9 @@ interface UIState {
   campusState: CampusState;
   rippleEffects: { id: string; x: number; y: number }[];
 
+  setScreen: (screen: AppScreen) => void;
+  openBottomSheet: (tab: string) => void;
+  closeBottomSheet: () => void;
   toggleFeedDock: () => void;
   toggleSidePanel: () => void;
   setSidePanelTab: (tab: 'photos' | 'messages' | 'mood' | 'journal' | 'observe' | 'stats') => void;
@@ -26,6 +33,8 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>()((set, get) => ({
+  currentScreen: 'home',
+  bottomSheet: null,
   feedDockExpanded: false,
   sidePanelOpen: false,
   sidePanelTab: 'photos',
@@ -37,6 +46,9 @@ export const useUIStore = create<UIState>()((set, get) => ({
   campusState: getCampusState(usePigeonStore.getState().mood),
   rippleEffects: [],
 
+  setScreen: (screen) => set({ currentScreen: screen }),
+  openBottomSheet: (tab) => set({ bottomSheet: tab }),
+  closeBottomSheet: () => set({ bottomSheet: null }),
   toggleFeedDock: () => set((s) => ({ feedDockExpanded: !s.feedDockExpanded })),
   toggleSidePanel: () => set((s) => ({ sidePanelOpen: !s.sidePanelOpen })),
   setSidePanelTab: (tab) => set({ sidePanelTab: tab }),

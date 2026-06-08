@@ -1,24 +1,20 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// 🔑 硬编码配置（本地HTML可用，不走环境变量）
+const SUPABASE_URL = 'https://ksbjrgjpjottykkogxvo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtzYmpyZ2pwam90dHlra29neHZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAyMzYxMTEsImV4cCI6MjA5NTgxMjExMX0.sU6Fe-HAIp86hUkmaNX5Of7grrTTnXM7fHo9y6wpH50';
 
-// Check if Supabase is configured
 export const isSupabaseConfigured = (): boolean => {
-  return Boolean(supabaseUrl && supabaseAnonKey &&
-    !supabaseUrl.includes('your-project-id') &&
-    !supabaseAnonKey.includes('your-anon-key'));
+  return !SUPABASE_ANON_KEY.includes('你的anon-key');
 };
 
-// Create client only if configured
 let _client: ReturnType<typeof createClient> | null = null;
 
 export function getSupabase() {
   if (!_client && isSupabaseConfigured()) {
-    _client = createClient(supabaseUrl!, supabaseAnonKey!);
+    _client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
   return _client;
 }
 
-// Channel name for real-time pigeon state
 export const PIGEON_CHANNEL = 'pigeon-state';

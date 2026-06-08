@@ -24,7 +24,7 @@ export default function PigeonBubble() {
 
   return (
     <div style={{
-      position: 'fixed',
+      position: 'absolute',
       left: `${left}%`,
       top: `${top}%`,
       transform: 'translate(-50%, -100%)',

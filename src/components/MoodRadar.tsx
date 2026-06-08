@@ -52,7 +52,7 @@ export default function MoodRadar() {
 
   return (
     <div style={{
-      position: 'fixed', bottom: 'clamp(100px, 18vh, 200px)', left: 'clamp(12px, 2vw, 32px)',
+      position: 'absolute', bottom: 'clamp(100px, 18vh, 200px)', left: 'clamp(12px, 2vw, 32px)',
       zIndex: 8,
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
     }}>
@@ -82,13 +82,14 @@ export default function MoodRadar() {
           opacity: 0.8,
         }}
       >
-        {/* Data polygon */}
+        {/* Data polygon — 暖调半透明 */}
         <polygon
           points={dataPoints}
-          fill="rgba(255,255,255,0.1)"
-          stroke="rgba(255,255,255,0.45)"
-          strokeWidth="1"
-          style={{ transition: 'all 1.5s ease' }}
+          fill="rgba(255,252,245,0.12)"
+          stroke="rgba(255,252,245,0.5)"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+          style={{ transition: 'all 1.5s var(--ease-in-out-soft)' }}
         />
 
         {/* Labels */}
@@ -101,8 +102,8 @@ export default function MoodRadar() {
               x={x} y={y}
               textAnchor="middle"
               dominantBaseline="central"
-              fill="rgba(255,255,255,0.5)"
-              fontSize="5"
+              fill="rgba(255,255,255,0.55)"
+              fontSize="5.5"
               style={{ pointerEvents: 'none' }}
             >
               {dim.emoji}

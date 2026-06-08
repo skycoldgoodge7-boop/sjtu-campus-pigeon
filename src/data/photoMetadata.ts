@@ -280,6 +280,30 @@ export const PHOTO_METADATA: Record<string, PhotoMeta[]> = {
     },
   ],
 
+  // ── 南大门 ──
+  'nan-da-men': [
+    {
+      filename: '8097e1cfcdda4f9ae4ad6324c90696e9.jpg',
+      description: '南大门校门，校园南侧主要出入口',
+      tags: ['校门', '南门', '出入口', '建筑'],
+      moodMatch: ['warmth', 'social', 'academic'],
+      timeMatch: ['morning', 'afternoon', 'evening'],
+      stateMatch: ['normal', 'graduation'],
+    },
+  ],
+
+  // ── 思源门 ──
+  'siyuan-men': [
+    {
+      filename: '5429715f79700fe6ec20a816dca6a4d4.jpg',
+      description: '思源门，思源湖畔的西南入口',
+      tags: ['校门', '思源', '湖畔', '入口'],
+      moodMatch: ['romance', 'warmth', 'loneliness'],
+      timeMatch: ['dawn', 'evening', 'afternoon'],
+      stateMatch: ['normal', 'spring'],
+    },
+  ],
+
   // ── 彩蛋照片 ──
   'easter-egg': [
     {

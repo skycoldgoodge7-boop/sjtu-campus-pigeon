@@ -5,6 +5,6 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   build: {
-    assetsInlineLimit: 10 * 1024 * 1024, // 10MB — inline all images as base64
+    assetsInlineLimit: 10 * 1024 * 1024,
   },
 })

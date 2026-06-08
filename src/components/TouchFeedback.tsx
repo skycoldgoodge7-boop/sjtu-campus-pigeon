@@ -8,11 +8,11 @@ export default function TouchFeedback() {
       {ripples.map((r) => (
         <div key={r.id} style={{
           position: 'absolute',
-          left: r.x - 20, top: r.y - 20,
-          width: 40, height: 40,
+          left: r.x - 24, top: r.y - 24,
+          width: 48, height: 48,
           borderRadius: '50%',
-          background: 'rgba(255,255,255,0.3)',
-          animation: 'ripple 0.6s ease-out forwards',
+          background: 'radial-gradient(circle at center, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0.1) 35%, transparent 70%)',
+          animation: 'ripple 0.8s var(--ease-out-expo) forwards',
         }} />
       ))}
     </div>

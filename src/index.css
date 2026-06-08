@@ -8,10 +8,13 @@
   --color-primary: #8B6B5A;
   --color-primary-light: #B89888;
   --color-accent: #D4A878;
+  --color-accent-warm: #C4776B;      /* 温暖强调色 — 替代生硬的 #8B0000 */
+  --color-accent-soft: #E8C8B8;      /* 柔和暖调 — 面板激活背景 */
   --color-bg: #FFF8E7;
   --color-bg-warm: #FFF0D0;
   --color-green: #A0B888;
   --color-green-light: #C0D5B0;
+  --color-green-muted: #B0C0A0;      /* 哑光绿 — 地标高亮 */
   --color-water: #A8C4D4;
   --color-water-light: #C4D8E4;
   --color-sky: #B0C8D8;
@@ -31,11 +34,16 @@
   --shadow-sm: 0 1px 4px var(--color-shadow);
   --shadow-md: 0 2px 12px rgba(100, 80, 60, 0.08);
   --shadow-lg: 0 4px 24px rgba(100, 80, 60, 0.1);
+  --shadow-glow-warm: 0 2px 18px rgba(196, 119, 107, 0.12);
 
   --font-main: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-size-base: clamp(14px, 1.2vw, 18px);
   --font-size-lg: clamp(18px, 2vw, 28px);
   --font-size-xl: clamp(24px, 3.5vw, 48px);
+
+  /* 过渡曲线 */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-soft: cubic-bezier(0.45, 0, 0.25, 1);
 }
 
 * {
@@ -49,7 +57,7 @@ html, body {
   width: 100%;
   overflow: hidden;
   font-family: var(--font-main);
-  background: #1a1a2e;
+  background: #F5F0E8;
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -62,15 +70,12 @@ html, body {
   overflow: hidden;
 }
 
-/* ====== 简约童趣纸张底 ====== */
+/* ====== 校园地图底 — 透明，底图穿透 ====== */
 .map-container {
-  background-color: #F8F4EC;
-  background-image:
-    /* 轻微纸张纤维 */
-    radial-gradient(circle at 25% 18%, rgba(220,205,175,0.06) 0%, transparent 45%),
-    radial-gradient(circle at 72% 55%, rgba(215,200,170,0.05) 0%, transparent 40%);
-  background-blend-mode: normal;
+  background-color: transparent;
+  background-image: none;
 }
+
 
 /* ====== Animations ====== */
 @keyframes bounce {
@@ -160,5 +165,139 @@ html, body {
 @keyframes loadingBar {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(350%); }
+}
+
+@keyframes cloudDrift {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(100vw + 200%)); }
+}
+
+@keyframes cloudBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes swipeHint {
+  0%, 100% { transform: translateX(0); opacity: 0.6; }
+  50% { transform: translateX(-30px); opacity: 1; }
+}
+
+@keyframes fireflyFloat {
+  0%, 100% { transform: translateY(0) translateX(0); opacity: 0.2; }
+  25%  { transform: translateY(-15px) translateX(8px); opacity: 0.8; }
+  50%  { transform: translateY(-5px) translateX(-5px); opacity: 0.3; }
+  75%  { transform: translateY(-20px) translateX(12px); opacity: 0.9; }
+}
+
+@keyframes sparklePulse {
+  0%, 100% { transform: scale(0.3); opacity: 0; }
+  50% { transform: scale(1); opacity: 0.6; }
+}
+
+@keyframes snowFall {
+  0%   { transform: translateY(-5vh) rotate(0deg); opacity: 0; }
+  10%  { opacity: 0.7; }
+  90%  { opacity: 0.5; }
+  100% { transform: translateY(105vh) rotate(360deg); opacity: 0; }
+}
+
+@keyframes pigeonFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes pigeonBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes targetPulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+@keyframes targetDot {
+  0%, 100% { transform: scale(1); opacity: 0.4; }
+  50% { transform: scale(1.5); opacity: 1; }
+}
+
+@keyframes landmarkBreathe {
+  0%, 100% { transform: scale(0.9); opacity: 0.5; }
+  50% { transform: scale(1.05); opacity: 0.15; }
+}
+
+/* ========== 平板大屏优化 ========== */
+@media (min-width: 768px) {
+  /* 投喂按钮加大 */
+  .feed-button {
+    min-width: 96px !important;
+    min-height: 96px !important;
+  }
+  /* 侧边面板加宽 */
+  .side-panel {
+    width: min(30vw, 480px) !important;
+  }
+}
+
+/* 宽屏检测 */
+@media (orientation: landscape) and (min-width: 1024px) {
+  #root {
+    font-size: 18px;
+  }
+}
+
+/* 触摸友好：去掉小按钮的误触 */
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* 防息屏提示条 */
+.keep-awake-banner {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  color: white;
+  padding: 16px 32px;
+  border-radius: 24px;
+  font-size: 18px;
+  font-weight: 600;
+  pointer-events: none;
+  animation: fadeIn 0.3s ease, fadeOut 0.5s ease 2.5s forwards;
+}
+
+/* ========== 无障碍：减弱动画偏好 ========== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ========== 键盘焦点环 ========== */
+:focus-visible {
+  outline: 2px solid var(--color-accent-warm);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ========== 触摸涟漪增强 ========== */
+.touch-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0) 70%);
+  animation: ripple 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  pointer-events: none;
 }
 

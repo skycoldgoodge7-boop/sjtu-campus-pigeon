@@ -1,10 +1,19 @@
+import { useState } from 'react';
 import { usePigeonStore } from '../store/pigeonStore';
 import { characters } from '../data/characters';
+import { getEncounterPhoto } from '../data/photoGallery';
 
 export default function ObservationArchive() {
   const remembered = usePigeonStore((s) => s.rememberedCharacters);
   const todayEncounters = usePigeonStore((s) => s.todayEncounters);
   const traces = usePigeonStore((s) => s.characterTraces);
+  const [expandedPhotos, setExpandedPhotos] = useState<Set<string>>(new Set());
+
+  const togglePhoto = (id: string) => setExpandedPhotos((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const known = [...remembered].sort((a, b) => b.lastSeen - a.lastSeen);
   const active = known.filter((r) => !r.disappeared);
@@ -60,7 +69,7 @@ export default function ObservationArchive() {
               <div key={cid} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px', marginBottom: 6,
-                background: 'rgba(139,0,0,0.02)',
+                background: 'rgba(196,119,107,0.035)',
                 borderRadius: 12,
                 opacity: 0.7,
               }}>
@@ -105,7 +114,7 @@ export default function ObservationArchive() {
               <div key={char!.id} style={{
                 display: 'flex', alignItems: 'flex-start', gap: 12,
                 padding: '12px 14px', marginBottom: 8,
-                background: 'rgba(139,0,0,0.04)', borderRadius: 14,
+                background: 'rgba(196,119,107,0.06)', borderRadius: 14,
                 animation: 'fadeInUp 0.5s ease both',
               }}>
                 <span style={{ fontSize: 'clamp(24px, 2vw, 32px)', lineHeight: 1.2 }}>
@@ -132,6 +141,17 @@ export default function ObservationArchive() {
                   }}>
                     {char.observationLevels[obsIdx]}
                   </div>
+                  {rc && (
+                    <div style={{
+                      marginTop: 4, fontSize: 10, color: '#8B7355', opacity: 0.45,
+                    }}>
+                      ⭐ 遇见 {rc.encounterCount} 次
+                      {(() => {
+                        const daysAgo = Math.floor((Date.now() - rc.lastSeen) / 86400000);
+                        return daysAgo === 0 ? ' · 今天' : daysAgo === 1 ? ' · 昨天' : ` · ${daysAgo}天前`;
+                      })()}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -153,40 +173,92 @@ export default function ObservationArchive() {
             if (!char) return null;
             const shownToday = todayEncounters.includes(rc.characterId);
             const obsIdx = Math.min(2, Math.floor((rc.encounterCount - 1) / 3));
+            const photo = rc.stage >= 2 ? getEncounterPhoto(rc.characterId) : undefined;
+            const showPhoto = photo && expandedPhotos.has(rc.characterId);
 
             return (
               <div key={rc.characterId} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '8px 12px', marginBottom: 6,
-                background: shownToday ? 'transparent' : 'rgba(139,0,0,0.02)',
-                borderRadius: 12,
-                opacity: shownToday ? 0.5 : 1,
+                marginBottom: 8,
+                borderRadius: 14,
+                background: shownToday ? 'rgba(196,119,107,0.02)' : 'rgba(196,119,107,0.04)',
+                border: photo ? '1px solid rgba(196,119,107,0.08)' : 'none',
+                overflow: 'hidden',
               }}>
-                <span style={{ fontSize: 'clamp(18px, 1.5vw, 24px)', width: 32, textAlign: 'center' }}>
-                  {char.silhouette}
-                </span>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontWeight: 600, color: '#4A3728',
-                    fontSize: 'clamp(10px, 0.85vw, 13px)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {char.name}
-                    <span style={{ marginLeft: 4, opacity: 0.4, fontSize: '0.8em' }}>
-                      {formatLastSeen(rc.lastSeen)}
-                    </span>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 14px',
+                  cursor: photo ? 'pointer' : 'default',
+                }}
+                  onPointerDown={() => photo && togglePhoto(rc.characterId)}
+                >
+                  <span style={{ fontSize: 'clamp(20px, 1.8vw, 28px)', width: 36, textAlign: 'center' }}>
+                    {char.silhouette}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: 600, color: '#4A3728',
+                      fontSize: 'clamp(11px, 0.9vw, 14px)',
+                    }}>
+                      {char.name}
+                      {rc.stage >= 2 && (
+                        <span style={{ marginLeft: 6, fontSize: '0.75em', fontWeight: 400, color: '#8B7355', opacity: 0.5 }}>
+                          {rc.stage === 3 ? '老友' : '认识'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{
+                      fontSize: 'clamp(9px, 0.75vw, 11px)',
+                      color: '#8B7355', opacity: 0.55, marginTop: 2,
+                    }}>
+                      {char.observationLevels[obsIdx]}
+                    </div>
+                    <div style={{ marginTop: 3, fontSize: 10, color: '#8B7355', opacity: 0.4 }}>
+                      ⭐ 遇见 {rc.encounterCount} 次 · {formatLastSeen(rc.lastSeen)}
+                      {photo && (
+                        <span style={{ marginLeft: 8, color: '#C4776B', opacity: 0.85, fontSize: 11, fontWeight: 500 }}>
+                          📷 点击查看合影
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{
-                    fontSize: 'clamp(9px, 0.7vw, 11px)',
-                    color: '#8B7355', opacity: 0.55,
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>
-                    {char.observationLevels[obsIdx]}
+                  <div style={{ fontSize: 14, opacity: 0.3, paddingRight: 4 }}>
+                    {photo ? (showPhoto ? '▼' : '▶') : null}
                   </div>
                 </div>
-                <span style={{ fontSize: '0.75em', color: '#8B7355', opacity: 0.35, whiteSpace: 'nowrap' }}>
-                  {rc.encounterCount}次
-                </span>
+
+                {/* 合影展开 — 完整大图 */}
+                {photo && showPhoto && (
+                  <div style={{
+                    padding: '0 14px 14px',
+                    animation: 'fadeInUp 0.35s ease both',
+                  }}>
+                    <div style={{
+                      borderRadius: 14, overflow: 'hidden',
+                      background: 'rgba(0,0,0,0.02)',
+                      border: '1px solid rgba(196,119,107,0.1)',
+                    }}>
+                      <img
+                        src={photo.path}
+                        alt={photo.caption}
+                        style={{
+                          width: '100%',
+                          maxHeight: 320,
+                          objectFit: 'contain',
+                          display: 'block',
+                          background: 'rgba(255,248,231,0.3)',
+                        }}
+                      />
+                      <div style={{
+                        padding: '10px 14px',
+                        fontSize: 12, color: '#4A3728',
+                        textAlign: 'center', fontWeight: 500,
+                        background: 'rgba(196,119,107,0.04)',
+                      }}>
+                        📷 {photo.caption}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -211,7 +283,7 @@ export default function ObservationArchive() {
               <div key={rc.characterId} style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 padding: '10px 14px', marginBottom: 6,
-                background: 'rgba(139,0,0,0.02)', borderRadius: 12,
+                background: 'rgba(196,119,107,0.035)', borderRadius: 12,
                 opacity: 0.55,
               }}>
                 <span style={{

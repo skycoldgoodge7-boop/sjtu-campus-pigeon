@@ -1,3 +1,6 @@
+// ====== 天气（重导出） ======
+export type { WeatherData, WeatherCondition } from '../utils/weather';
+
 // ====== 情绪维度 ======
 export interface CampusMood {
   stress: number;      // 压力
@@ -10,6 +13,15 @@ export interface CampusMood {
   slack: number;       // 摸鱼
 }
 
+// ====== 礼物行为标记 ======
+export interface GiftFlags {
+  hasUmbrella: boolean;
+  hasCamera: boolean;
+  hasHeadphone: boolean;
+  hasScarf: boolean;
+  hasFlower: boolean;
+}
+
 // ====== 投喂物品 ======
 export type FeedItemId = 'bread' | 'coffee' | 'milkTea' | 'noodles' | 'fries' | 'flower' | 'umbrella' | 'headphone' | 'book' | 'scarf' | 'camera' | 'note';
 
@@ -19,6 +31,8 @@ export interface FeedItem {
   emoji: string;
   moodEffect: Partial<CampusMood>;
   thoughtBubbles: string[];
+  /** 喂食时的叙事反馈（替代"刚刚收到了X"） */
+  reactions: string[];
 }
 
 // ====== 地图地标位置 ======
@@ -54,6 +68,8 @@ export interface DailyJournal {
   nightActivity: string | null;
   campusState: CampusState;
   hasUmbrella: boolean;
+  pickedNote?: string;     // 当天鸽子捡到的纸条内容
+  pigeonReply?: string;    // 鸽子对纸条的回复
   content: string;         // Generated text
 }
 
@@ -127,4 +143,106 @@ export interface PigeonBubble {
   text: string;
   emoji: string;
   expiresAt: number;
+}
+
+// ====== 校园热点 ======
+export interface CampusHotspot {
+  id: string;
+  title: string;
+  date: string;           // "YYYY-MM-DD"
+  summary: string;
+  url: string;
+  image_url?: string;
+  category: string;
+  category_emoji: string;
+  mood_effect: Partial<CampusMood>;
+  landmark_hint?: string;
+  scraped_at: number;
+  is_active: boolean;
+}
+
+// ====== 每日投票 ======
+export interface VoteOption {
+  emoji: string;
+  text: string;
+  moodEffect: Partial<CampusMood>;
+  targetLandmark?: string;         // 赢了→鸽子明天从此出发
+}
+
+export interface VoteBehaviorMod {
+  moveChanceMod: number;       // 移动概率倍率
+  activityWeights: Partial<Record<PigeonActivity, number>>;  // 活动权重偏置
+}
+
+export interface DailyVote {
+  id: string;                  // "vote-YYYY-MM-DD"
+  date: string;                // "YYYY-MM-DD"
+  question: string;            // AI 生成的问题
+  options: VoteOption[];       // 4 选项
+  totalVotes: number;
+  voteCounts: number[];        // 每选项票数
+  winningOption: number;       // 胜出选项索引
+  resultMood: string;          // emoji 标签：😊 开心 / 🤔 思考 / 😴 困倦 / 🥳 兴奋
+  resultBehaviorModifier: VoteBehaviorMod;
+  generatedAt: number;
+  tomorrowLandmark?: string;   // 胜出选项的目的地
+}
+
+// ====== 用户投票记录 ======
+export interface UserVoteRecord {
+  date: string;                // "YYYY-MM-DD"
+  voteIndex: number;
+  rumorVote: 'true' | 'false' | null;       // @deprecated 用 topicVote
+  topicVote: 'agree' | 'disagree' | null;   // 今日话题投票
+}
+
+// ====== 背包物品 ======
+export interface BackpackItem {
+  id: string;                  // "backpack-<landmarkId>"
+  name: string;
+  emoji: string;
+  landmarkId: string;
+  landmarkName: string;
+  collectedAt: string;         // "YYYY-MM-DD"
+  description: string;
+  rarity: 'common' | 'uncommon' | 'rare';
+  /** 预设故事，点击物品时展示 */
+  story: string;
+}
+
+// ====== 校园传闻 / 今日话题 ======
+export interface CampusRumor {
+  id: string;                  // "rumor-YYYY-MM-DD"
+  date: string;
+  content: string;             // AI 生成的内容
+  trueVotes: number;           // 认同数
+  falseVotes: number;          // 不认同数
+  generatedAt: number;
+}
+
+/** CampusRumor 的语义别名 — V2.0 后推荐使用 */
+export type DailyTopic = CampusRumor;
+
+// ====== 校园日报 ======
+export interface DailyNewspaper {
+  id: string;                  // "newspaper-YYYY-MM-DD"
+  date: string;
+  headline: string;            // AI 生成的抓人标题
+  interactionCount: number;    // 当日互动总人次
+  locationName: string;
+  locationEmoji: string;
+  itinerary: string[];         // 今日访问的地标名
+  todayTopic: string;          // 投票问题
+  votingResult: {
+    question: string;
+    winnerEmoji: string;
+    winnerText: string;
+    voteDistribution: number[]; // 百分比
+    resultMood: string;
+  } | null;
+  photoId: string | null;
+  collectedItems: BackpackItem[];
+  rumorContent: string | null;
+  pigeonThought: string;       // AI 生成的感悟
+  content: string;             // 完整日报文本
 }

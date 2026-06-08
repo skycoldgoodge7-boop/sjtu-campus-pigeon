@@ -6,6 +6,26 @@ export function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+/** 投票是否仍然开放（22:00 截止） */
+export function isVoteOpen(): boolean {
+  return new Date().getHours() < 22;
+}
+
+/** 是否到了生成日报的时间（23:00 之后、日期未切换之前） */
+export function isNewspaperTime(): boolean {
+  const h = new Date().getHours();
+  return h >= 23;
+}
+
+/** 返回距离投票截止的分钟数（用于 UI 倒计时） */
+export function minutesUntilVoteClose(): number {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setHours(22, 0, 0, 0);
+  const diff = cutoff.getTime() - now.getTime();
+  return Math.max(0, Math.ceil(diff / 60000));
+}
+
 export function formatCountdown(totalSeconds: number): string {
   if (totalSeconds <= 0) return '已归来';
   const hours = Math.floor(totalSeconds / 3600);

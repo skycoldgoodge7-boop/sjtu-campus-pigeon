@@ -22,7 +22,7 @@ export default function StatusLine() {
 
   return (
     <div style={{
-      position: 'fixed',
+      position: 'absolute',
       top: 'clamp(90px, 15vh, 140px)',
       left: 0, right: 0,
       zIndex: 10,
@@ -32,14 +32,14 @@ export default function StatusLine() {
       <div style={{
         fontSize: 'clamp(13px, 1.3vw, 18px)',
         fontWeight: 500,
-        color: 'rgba(255,255,255,0.85)',
-        textShadow: '0 1px 8px rgba(0,0,0,0.3)',
-        padding: '4px 20px',
-        background: 'rgba(0,0,0,0.25)',
-        backdropFilter: 'blur(8px)',
+        color: 'rgba(255,255,255,0.9)',
+        textShadow: '0 1px 6px rgba(0,0,0,0.25), 0 0 1px rgba(0,0,0,0.15)',
+        padding: '5px 22px',
+        background: 'rgba(0,0,0,0.22)',
+        backdropFilter: 'blur(10px)',
         borderRadius: 16,
-        transition: 'opacity 0.5s ease',
-        letterSpacing: 1,
+        transition: 'opacity 0.5s var(--ease-in-out-soft)',
+        letterSpacing: 0.8,
       }}>
         {displayText}{locationHint}
       </div>
