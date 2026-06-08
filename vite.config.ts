@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { viteSingleFile } from 'vite-plugin-singlefile'
 
 export default defineConfig({
-  plugins: [react(), viteSingleFile()],
+  base: '/',
+  plugins: [react()],
   build: {
-    assetsInlineLimit: 10 * 1024 * 1024,
+    assetsInlineLimit: 0, // 图片等资源作为独立文件，不内嵌 base64
   },
 })

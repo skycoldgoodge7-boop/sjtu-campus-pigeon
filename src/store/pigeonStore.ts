@@ -60,7 +60,7 @@ interface DbTodayMeta {
   mood_streaks: Record<string, number>;
   gift_flags: GiftFlags;
   unlocked_footprints?: string[];
-  zhipu_api_key?: string;
+  // zhipu_api_key 字段已从数据库删除，不再同步
 }
 
 interface DbFeedTotal { item_id: string; count: number; today_count: number; }
