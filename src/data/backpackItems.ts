@@ -122,6 +122,14 @@ export function getCollectibleForLandmark(landmarkId: string): LandmarkCollectib
   return items[Math.floor(Math.random() * items.length)];
 }
 
+/** 按 landmarkId + name 查找预设故事（云端缺少 story 时回填） */
+export function findCollectibleStory(landmarkId: string, name: string): string | null {
+  const items = COLLECTIBLES[landmarkId];
+  if (!items) return null;
+  const found = items.find((c) => c.name === name);
+  return found?.story || null;
+}
+
 export function getCollectibleCount(landmarkId: string): number {
   return (COLLECTIBLES[landmarkId] || []).length;
 }

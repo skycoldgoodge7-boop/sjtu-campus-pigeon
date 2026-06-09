@@ -6,15 +6,11 @@ import type { DailyNewspaper as DailyNewspaperType } from '../types';
 export default function DailyNewspaper() {
   const dailyNewspaper = usePigeonStore((s) => s.dailyNewspaper);
   const pastNewspapers = usePigeonStore((s) => s.pastNewspapers);
-  const journalEntries = usePigeonStore((s) => s.journalEntries);
 
   const np = dailyNewspaper;
 
   // 往期报纸（排除当前显示的）
   const pastPapers = pastNewspapers.filter((p) => !np || p.id !== np.id);
-  // 往期日记（排除已在报纸中显示的日期）
-  const newspaperDates = new Set(pastNewspapers.map((p) => p.date));
-  const pastJournals = journalEntries.filter((j) => !newspaperDates.has(j.date));
 
   if (!np && pastPapers.length === 0) {
     return (
@@ -53,48 +49,6 @@ export default function DailyNewspaper() {
           {pastPapers.map((p) => (
             <PastNewspaperCard key={p.id} np={p} />
           ))}
-        </div>
-      )}
-
-      {/* 往期数据摘要 — 没有完整日报的日期用简洁摘要补充 */}
-      {pastJournals.length > 0 && (
-        <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#8B7355', marginBottom: 12, marginTop: pastPapers.length > 0 ? 20 : 8 }}>
-            📋 往期数据摘要 ({pastJournals.length} 篇)
-          </div>
-          {pastJournals.map((j) => (
-            <div key={j.id} style={{
-              background: 'rgba(196,119,107,0.03)',
-              borderRadius: 14,
-              padding: '14px 16px',
-              marginBottom: 10,
-              border: '1px solid rgba(139,115,85,0.05)',
-            }}>
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: '#C4776B', marginBottom: 6,
-                display: 'flex', justifyContent: 'space-between',
-              }}>
-                <span>📋 {j.date.slice(5)}</span>
-                <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 10 }}>
-                  {j.feedCount}次投喂 · 到访{j.landmarksVisited.length}地
-                  {j.pickedNote ? ' · 捡到纸条' : ''}
-                </span>
-              </div>
-              {j.pigeonReply && (
-                <div style={{
-                  marginTop: 6, padding: '6px 10px',
-                  background: 'rgba(196,119,107,0.06)',
-                  borderRadius: 10,
-                  fontSize: '0.85em', opacity: 0.85,
-                  lineHeight: 1.6,
-                  border: '1px solid rgba(196,119,107,0.1)',
-                }}>
-                  🕊️ 鸽子回复：「{j.pigeonReply}」
-                </div>
-              )}
-            </div>
-          ))}
-          <div style={{ height: 40 }} />
         </div>
       )}
     </div>

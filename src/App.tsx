@@ -41,11 +41,40 @@ export default function App() {
     initFromCloud();
   }, [initFromCloud]);
 
-  // cloudReady 后立即生成投票 + 兜底定时器
+  // cloudReady 后立即同步 + 补生成
   useEffect(() => {
     if (!cloudReady) return;
     const store = usePigeonStore.getState();
     store.resetTodayIfNeeded();
+
+    // 兜底：如果还没有昨天日报，强制生成（覆盖 Supabase 未配置 / file:// 等提前 return 路径）
+    const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    const hasNewspaper = store.pastNewspapers?.some((n: { date: string }) => n.date === yesterday)
+      || store.dailyNewspaper?.date === yesterday;
+    if (!hasNewspaper) {
+      setTimeout(() => {
+        const s = usePigeonStore.getState();
+        const stillMissing = !s.pastNewspapers?.some((n: { date: string }) => n.date === yesterday)
+          && s.dailyNewspaper?.date !== yesterday;
+        if (stillMissing) {
+          s.generateDailyNewspaper();
+        }
+      }, 1500);
+    }
+
+    // 同样补日记
+    const hasJournal = store.journalEntries?.some((j: { date: string }) => j.date === yesterday);
+    const hadActivity = store.todayFeedCount > 0
+      || store.todayLandmarksVisited?.length > 0
+      || store.journalEntries?.length === 0;
+    if (!hasJournal && hadActivity) {
+      setTimeout(() => {
+        const s = usePigeonStore.getState();
+        if (!s.journalEntries?.some((j: { date: string }) => j.date === yesterday)) {
+          s.generateDailyJournal(yesterday);
+        }
+      }, 500);
+    }
 
     // 兜底：如果 3 秒后还没有投票，强制生成
     const fallbackTimer = setTimeout(() => {

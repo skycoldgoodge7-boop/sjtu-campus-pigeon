@@ -13,7 +13,7 @@ import ObservationArchive from './ObservationArchive';
 import StatsDashboard from './StatsDashboard';
 import BackpackView from './BackpackView';
 import SHARDS from '../data/memoryShards';
-import { landmarkPhotos } from '../data/photoGallery';
+import { landmarkPhotos, pickCaption } from '../data/photoGallery';
 
 type TabId = 'journal' | 'newspaper' | 'collection' | 'mailbox';
 
@@ -253,8 +253,8 @@ function CollectionView() {
 function FootprintGallery() {
   const unlockedFootprints = usePigeonStore((s) => s.unlockedFootprints);
   const unlockedSet = useMemo(() => new Set(unlockedFootprints), [unlockedFootprints]);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
-  // 算总数
   const totalPhotos = Object.values(landmarkPhotos).flat().length;
   const unlockedCount = unlockedFootprints.length;
   const allUnlocked = unlockedCount >= totalPhotos;
@@ -306,18 +306,20 @@ function FootprintGallery() {
                   }}>
                     {isUnlocked ? (
                       <>
-                        <div style={{ width: '100%', aspectRatio: '4/3', overflow: 'hidden', background: 'rgba(0,0,0,0.03)' }}>
+                        <div
+                          onPointerDown={() => setLightboxSrc(img.path)}
+                          style={{ width: '100%', aspectRatio: '4/3', overflow: 'hidden', background: 'rgba(0,0,0,0.03)', cursor: 'pointer' }}>
                           <img
                             src={img.path}
-                            alt={img.caption}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            alt={img.captions[0]}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
                           />
                         </div>
                         <div style={{
                           padding: '6px 8px', fontSize: 10, color: '#8B7355',
-                          textAlign: 'center', fontWeight: 500,
+                          textAlign: 'center', fontWeight: 500, lineHeight: 1.5,
                         }}>
-                          {img.caption}
+                          {pickCaption(img.captions)}
                         </div>
                       </>
                     ) : (
@@ -336,6 +338,26 @@ function FootprintGallery() {
           </div>
         );
       })}
+
+      {/* Lightbox — 点击放大 */}
+      {lightboxSrc && (
+        <div
+          onPointerDown={() => setLightboxSrc(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 3000,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 20,
+          }}>
+          <img src={lightboxSrc} alt="足迹照片"
+            onPointerDown={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: '95vw', maxHeight: '90vh',
+              objectFit: 'contain', borderRadius: 12,
+              boxShadow: '0 8px 40px rgba(0,0,0,0.3)',
+            }} />
+        </div>
+      )}
 
       <div style={{ height: 40 }} />
     </div>

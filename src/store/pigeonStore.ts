@@ -29,7 +29,7 @@ import {
   type JournalContext, type VoteGenContext, type TopicGenContext, type NewspaperContext,
 } from '../utils/ai';
 import { getFallbackQuestion, getFallbackTopic } from '../data/fallbackQuestions';
-import { getCollectibleForLandmark } from '../data/backpackItems';
+import { getCollectibleForLandmark, findCollectibleStory } from '../data/backpackItems';
 import { landmarkPhotos } from '../data/photoGallery';
 
 // ============================================================
@@ -983,6 +983,24 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         }
       } catch { /* no cloud record yet or error */ }
 
+      // 回填：对缺少 story 的背包物品从预设数据补上
+      const items = get().backpackItems;
+      const patched: BackpackItem[] = [];
+      for (const item of items) {
+        if (!item.story) {
+          const presetStory = findCollectibleStory(item.landmarkId, item.name);
+          if (presetStory) { patched.push({ ...item, story: presetStory }); continue; }
+        }
+        patched.push(item);
+      }
+      if (patched.some((p, i) => p.story !== items[i]?.story)) {
+        set({ backpackItems: patched });
+        localSave(get());
+        for (const item of patched) {
+          if (item.story) setTimeout(() => cloudSyncBackpackItem(item), 100);
+        }
+      }
+
       set({ cloudReady: true });
       startGlobalSync();
       // 订阅所有表的实时更新
@@ -1625,16 +1643,35 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     try {
       const { data } = await sb()!.from('backpack_items').select('*').order('collected_at', { ascending: false }).limit(100);
       if (data) {
-        set({
-          backpackItems: (data as DbBackpackItem[]).map((bi) => ({
+        const needsUpdate: BackpackItem[] = [];
+        const items = (data as DbBackpackItem[]).map((bi) => {
+          let story = bi.story || '';
+          // 云端缺 story 则从预设数据回填
+          if (!story) {
+            const presetStory = findCollectibleStory(bi.landmark_id, bi.name);
+            if (presetStory) {
+              story = presetStory;
+              needsUpdate.push({
+                id: bi.id, name: bi.name, emoji: bi.emoji,
+                landmarkId: bi.landmark_id, landmarkName: bi.landmark_name,
+                collectedAt: bi.collected_at, description: bi.description,
+                rarity: bi.rarity as BackpackItem['rarity'], story,
+              });
+            }
+          }
+          return {
             id: bi.id, name: bi.name, emoji: bi.emoji,
             landmarkId: bi.landmark_id, landmarkName: bi.landmark_name,
             collectedAt: bi.collected_at, description: bi.description,
-            rarity: bi.rarity as BackpackItem['rarity'],
-            story: bi.story || '',
-          })),
+            rarity: bi.rarity as BackpackItem['rarity'], story,
+          };
         });
+        set({ backpackItems: items });
         localSave(get());
+        // 回填：将补上的 story 写回云端
+        for (const item of needsUpdate) {
+          setTimeout(() => cloudSyncBackpackItem(item), 50);
+        }
       }
     } catch { /* silent */ }
   },
@@ -1700,15 +1737,27 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           pigeonThought: n.pigeon_thought, content: n.content,
         }));
 
-        // 如果最新的报纸是昨天或今天的，设为当前日报
+        // 合并：云端有就优先用云端的，但云端为空也不覆盖本地已生成的
+        const cur = get();
+        const merged = [...allPapers];
+        // 把本地有但云端没有的报纸补充进去
+        for (const p of cur.pastNewspapers) {
+          if (!merged.some((m) => m.id === p.id)) merged.push(p);
+        }
+        merged.sort((a, b) => b.date.localeCompare(a.date));
+        const finalPapers = merged.slice(0, 60);
+
+        // 云端最新报纸如果是昨天/今天的 → 设为当前日报
         const latestPaper = allPapers[0];
-        const isCurrent = latestPaper.date === today || latestPaper.date === yesterday;
+        const isCurrent = latestPaper?.date === today || latestPaper?.date === yesterday;
+
         set({
-          dailyNewspaper: isCurrent ? latestPaper : null,
-          pastNewspapers: allPapers.slice(0, 60),
+          dailyNewspaper: isCurrent ? latestPaper : cur.dailyNewspaper, // 云端没有就不覆盖本地
+          pastNewspapers: finalPapers,
         });
         localSave(get());
       }
+      // 云端没数据 → 什么都不做，保留本地已生成的报纸
     } catch { /* silent */ }
   },
 
@@ -2056,7 +2105,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           if (get().targetLandmarkId === winner.targetLandmark && get().pigeonActivity === 'walking') {
             set({ currentLandmarkId: winner.targetLandmark!, targetLandmarkId: null, pigeonActivity: 'idle', currentPath: null });
             get().collectBackpackItem(winner.targetLandmark!);
-            get().unlockFootprintPhoto(winner.targetLandmark!);
+            // 足迹照片在日记生成时统一解锁
             localSave(get());
             setTimeout(() => cloudSyncState(get()), 50);
           }
@@ -2138,7 +2187,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             });
             // 首次到达地标 → 收集背包物品
             get().collectBackpackItem(dest);
-            get().unlockFootprintPhoto(dest);
+            // 足迹照片在日记生成时统一解锁
             localSave(get());
             setTimeout(() => cloudSyncState(get()), 50);
           }
@@ -2478,54 +2527,94 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const campusState = getCampusState(state.mood);
     const dateLabel = yesterday.slice(5);
 
-    // V2.1: 纯感受叙事 — 不提具体地点名
+    // V2.2: 融合叙事 — 照片穿插在段落间
     let content = `「${dateLabel} 校园观察」\n\n`;
 
-    // 氛围（用地标类别而非名称）
-    const placeVibe = (() => {
+    // 氛围开场 — 更自然更随机
+    const vibeOptions = (() => {
       const cat = mostStayedLm?.category;
-      if (cat === 'nature') return '水边的风很舒服。';
-      if (cat === 'academic') return '周围很安静，只有翻书的声音。';
-      if (cat === 'culture' || cat === 'gate') return '这里有着很老很老的故事。';
-      if (cat === 'sports') return '远处有人在跑步。';
-      if (cat === 'dining') return '空气里飘着食物的香味。';
-      return '校园里很安静。';
+      if (cat === 'nature') return [
+        `风从水面吹过来，凉凉的。`,
+        `树叶沙沙响着。`,
+        `水面上有光在晃，一下一下的。`,
+        `草地里不知道什么虫子在叫。`,
+        `今天大部分时间都待在外面。`,
+      ];
+      if (cat === 'academic') return [
+        `周围很安静，偶尔有人翻书。`,
+        `窗台上积了一层薄薄的灰。`,
+        `走廊里偶尔有脚步声，很快又安静下来。`,
+        `灯很亮，比外面的天光还亮。`,
+      ];
+      if (cat === 'culture' || cat === 'gate') return [
+        `这个地方很老了。石头知道很多事。`,
+        `屋檐的影子落在地上，看着像睡着了一样。`,
+        `很安静。安静了很久的那种安静。`,
+        `路过的人会抬头看一眼。然后继续走。`,
+      ];
+      if (cat === 'sports') return [
+        `远处有人在跑。一圈一圈的。`,
+        `风里有草坪的味道。`,
+        `很空旷。空旷得让人想飞。`,
+        `有人在喊什么。听不太清。`,
+      ];
+      if (cat === 'dining') return [
+        `空气里飘着食物的味道。`,
+        `人来人往的，很热闹。`,
+        `有人端着盘子走过。`,
+        `这个时间，大家都在吃东西。`,
+      ];
+      return [
+        `校园里很安静。`,
+        `平常的一天。`,
+        `鸽子在这里待了很久。`,
+        `太阳慢慢挪着。`,
+      ];
     })();
-    content += `${placeVibe}\n\n`;
+    content += `${vibeOptions[Math.floor(Math.random() * vibeOptions.length)]}\n\n`;
 
-    // 天气感受
+    // 天气 — 融进感受里，不独立陈述
     if (state.weatherData) {
       const w = state.weatherData;
-      if (w.weatherCode <= 2) content += `今天阳光很好。\n\n`;
-      else if (w.weatherCode >= 51 && w.weatherCode <= 82) content += `下雨了。雨滴的声音很好听。\n\n`;
-      else if (w.weatherCode === 3 || w.weatherCode === 4) content += `云层厚厚的。\n\n`;
+      if (w.weatherCode <= 2) content += `阳光很好。暖和。\n\n`;
+      else if (w.weatherCode >= 51 && w.weatherCode <= 82) content += `下雨了。雨打在树叶上，很好听。\n\n`;
+      else if (w.weatherCode === 3 || w.weatherCode === 4) content += `云很厚。天灰灰的，但不闷。\n\n`;
       else content += `${buildWeatherSummary(state.weatherData)}\n\n`;
     }
 
-    // 有人来过（布尔级）
+    // 有人来过的痕迹
     if (hadInteraction) {
       const giftHints: string[] = [];
-      if (state.giftFlags.hasUmbrella) giftHints.push('有人送来了一把伞');
-      if (state.giftFlags.hasFlower) giftHints.push('有人放了一朵花');
-      if (state.giftFlags.hasCamera) giftHints.push('有人把相机留在了它身边');
-      if (state.giftFlags.hasHeadphone) giftHints.push('有人给它戴上耳机');
-      if (state.giftFlags.hasScarf) giftHints.push('有人给它围上了围巾');
+      if (state.giftFlags.hasUmbrella) giftHints.push('有人放了一把伞在旁边');
+      if (state.giftFlags.hasFlower) giftHints.push('谁放了一朵花');
+      if (state.giftFlags.hasCamera) giftHints.push('有台相机对着这边');
+      if (state.giftFlags.hasHeadphone) giftHints.push('不知道谁给它戴上了耳机');
+      if (state.giftFlags.hasScarf) giftHints.push('脖子上多了条围巾');
       if (giftHints.length > 0) {
         content += giftHints.join('。\n') + '。\n\n';
       } else {
-        content += '今天有人来过。\n\n';
+        const interactionLines = [
+          `今天有人来过。留下了些吃的。`,
+          `有人在这停留了一会儿。`,
+          `路过了几个人，其中一个停了一下。`,
+        ];
+        content += `${interactionLines[Math.floor(Math.random() * interactionLines.length)]}\n\n`;
       }
     } else {
-      content += '今天很安静。\n\n';
+      const quietLines = [
+        `今天很安静。只有鸽子自己。`,
+        `没什么人来。鸽子也乐得清静。`,
+        `一整天都安安静静的。`,
+      ];
+      content += `${quietLines[Math.floor(Math.random() * quietLines.length)]}\n\n`;
     }
 
-    // 纸条
+    // 纸条（简洁版）
     if (bottleLine) {
-      content += `捡到了一张纸条。\n`;
-      content += `上面写着："${pickedNote}"\n\n`;
+      content += `捡到了一张纸条。上面写着："${pickedNote}"\n\n`;
     }
 
-    // 遇见
+    // 遇见 — 融入叙事
     if (state.todayEncounters.length > 0) {
       for (const cid of state.todayEncounters) {
         const ch = characters.find((c) => c.id === cid);
@@ -2537,18 +2626,50 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     // 夜间
     if (nightActivity) content += `${nightActivity}\n\n`;
 
-    // 心情收尾
+    // 收尾 — 更有温度
     const moodEnding = generateMoodEnding(state.mood);
     if (moodEnding) content += `${moodEnding}\n`;
     const streakNote = generateStreakNote(state.moodStreaks);
     if (streakNote) content += `${streakNote}\n`;
     const seasonalNote = generateSeasonalNote(campusState);
     if (seasonalNote) content += `${seasonalNote}\n`;
+    // 加入一个随机的鸽子自言自语收尾
+    const closings = [
+      '咕。',
+      '鸽子的一天。',
+      '就这样吧。',
+      '明天还会来的。',
+      '鸽子也不知道明天会去哪。',
+    ];
+    content += `\n${closings[Math.floor(Math.random() * closings.length)]}`;
+
+    // 按当天访问的地标解锁足迹照片（每天每地标一张）
+    const visitedIds = state.todayLandmarksVisited.length > 0 ? state.todayLandmarksVisited : [state.currentLandmarkId];
+    const LANDMARK_TO_NAME: Record<string, string> = {
+      'siyuan-lake': '思源湖', 'new-library': '图书馆', 'temple-gate': '庙门',
+      'botanical-garden': '植物园', 'seiee-lawn': '电院大草坪', 'zhiyuan-lake': '致远湖',
+      'dining-hall-1': '第一餐饮大楼', 'south-stadium': '南区体育场', 'nan-da-men': '南大门',
+      'siyuan-men': '思源门', 'east-middle': '东中院', 'design-school': '设计学院',
+      'humanities-school': '人文学院', 'east-lower': '东下院', 'hufaguang-stadium': '胡法光体育场',
+      'seiee-complex': '电院', 'tuxin-building': '图信大楼',
+    };
+    for (const vid of [...new Set(visitedIds)]) {
+      const name = LANDMARK_TO_NAME[vid];
+      if (!name || !landmarkPhotos[name]) continue;
+      const allPhotos = landmarkPhotos[name];
+      const curUnlocked = new Set(get().unlockedFootprints);
+      const locked = allPhotos.find((p) => !curUnlocked.has(p.path));
+      if (locked) {
+        const next = [...get().unlockedFootprints, locked.path];
+        set({ unlockedFootprints: next });
+        try { localStorage.setItem('pigeon-footprints', JSON.stringify(next)); } catch {}
+      }
+    }
 
     const journal: DailyJournal = {
       id: `journal-${yesterday}`, date: yesterday, feedCount,
       topFeedItem: topItemName, topFeedCount: topCount, specialItems,
-      landmarksVisited: state.todayLandmarksVisited.length > 0 ? state.todayLandmarksVisited : [state.currentLandmarkId],
+      landmarksVisited: visitedIds,
       mostStayedLandmark: mostStayedLm?.name || '思源湖', nightActivity, campusState,
       hasUmbrella: (state.feedTotals['umbrella'] || 0) > 0, pickedNote, pigeonReply, content,
     };
