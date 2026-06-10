@@ -725,8 +725,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
   // ============ 从云端初始化 ============
   initFromCloud: async () => {
-    // 【硬闸门】在加载任何数据之前，先检查日期是否已跨天
-    // 如果是，直接把 localStorage 里的计数清零，再走后续加载
+    // 【保护期锁】每次页面加载都设，覆盖 Supabase 初始同步窗口（60秒）
+    // 这样即使 localStorage 被清空，也不会被云端旧值立刻写回
+    set({ lastCrossDayReset: Date.now() });
+
+    // 【硬闸门】检查 localStorage 日期，跨天则就地清零
     const realToday = getTodayDateString();
     try {
       const raw = localStorage.getItem(LS_KEY);
