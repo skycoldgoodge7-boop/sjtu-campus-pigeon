@@ -715,6 +715,34 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
   // ============ 从云端初始化 ============
   initFromCloud: async () => {
+    // 【硬闸门】在加载任何数据之前，先检查日期是否已跨天
+    // 如果是，直接把 localStorage 里的计数清零，再走后续加载
+    const realToday = getTodayDateString();
+    try {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const inner = parsed.state || parsed;
+        if (inner.todayDate && inner.todayDate !== realToday) {
+          console.log('[pigeon] 🧹 检测到跨天 — localStorage todayDate:', inner.todayDate, '真实日期:', realToday, '— 强制清零');
+          // 就地改写 localStorage，清零今日计数
+          inner.todayDate = realToday;
+          inner.todayFeedCount = 0;
+          inner.todayFeedTotals = {};
+          inner.todayLandmarksVisited = [];
+          inner.todayEncounters = [];
+          inner.dailyVote = null;
+          inner.campusRumor = null;
+          inner.dailyNewspaper = null;
+          inner.voteRitualDone = false;
+          inner.voteRitualLabel = '';
+          inner.giftFlags = { hasUmbrella: false, hasCamera: false, hasHeadphone: false, hasScarf: false, hasFlower: false };
+          const newRaw = JSON.stringify({ state: inner, version: parsed.version || 0 });
+          localStorage.setItem(LS_KEY, newRaw);
+        }
+      }
+    } catch { /* 格式损坏就跳过，正常流程会处理 */ }
+
     // 始终先加载 localStorage 作为基础数据（不设 cloudReady，等 Supabase 完成）
     const local = loadLocalState();
     if (Object.keys(local).length > 0) {
