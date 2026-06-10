@@ -582,7 +582,7 @@ interface PigeonState {
   retrieveBottle: () => DriftBottle | null;
   decayMood: () => void;
   sinkOldBottles: () => void;
-  resetTodayIfNeeded: () => void;
+  resetTodayIfNeeded: (force?: boolean) => void;
   generateDailyJournal: (forceDate?: string) => void;
   setStatusText: (text: string, durationMs?: number) => void;
   rememberCharacter: (characterId: string, landmarkId: string) => void;
@@ -776,6 +776,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
     // 如果 Supabase 未配置，直接用 localStorage 数据
     if (!isSupabaseConfigured()) {
+      // 兜底：所有云端数据加载完成后，强制跑一次 resetTodayIfNeeded
+      // 覆盖 localStorage 为空但云端有旧值的场景
+      get().resetTodayIfNeeded(true);
+
       set({ cloudReady: true });
       startGlobalSync();
       return;
@@ -1059,6 +1063,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           if (item.story) setTimeout(() => cloudSyncBackpackItem(item), 100);
         }
       }
+
+      // 兜底：所有云端数据加载完成后，强制跑一次 resetTodayIfNeeded
+      // 覆盖 localStorage 为空但云端有旧值的场景
+      get().resetTodayIfNeeded(true);
 
       set({ cloudReady: true });
       startGlobalSync();
@@ -2421,24 +2429,27 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     }
   },
 
-  resetTodayIfNeeded: () => {
+  resetTodayIfNeeded: (force?: boolean) => {
     const today = getTodayDateString();
     const state = get();
-    if (state.todayDate !== today) {
-      console.log('[pigeon] resetTodayIfNeeded TRIGGERED — state.todayDate:', state.todayDate, 'today:', today, '— ZEROING todayFeedCount:', state.todayFeedCount, 'todayFeedTotals:', JSON.stringify(state.todayFeedTotals));
-      // 生成昨天的日记和日报
-      state.generateDailyJournal();
-      state.generateDailyNewspaper();
-      state.updateMoodStreaks();
-      state.checkDisappearances();
+    if (force || state.todayDate !== today) {
+      const actuallyCrossDay = state.todayDate !== today;
+      console.log('[pigeon] resetTodayIfNeeded — force:', !!force, 'actuallyCrossDay:', actuallyCrossDay, 'state.todayDate:', state.todayDate, 'today:', today);
 
-      // 每日清空漂流纸条：未被打捞的 floating 纸条标记为沉没，已捞取的 picked 纸条永久保留
+      // 只有真正跨天时才生成日记/日报/更新情绪
+      if (actuallyCrossDay) {
+        state.generateDailyJournal();
+        state.generateDailyNewspaper();
+        state.updateMoodStreaks();
+        state.checkDisappearances();
+      }
+
+      // 无论如何都清零今日计数器 + 保护标记
       const clearedMessages = state.messages.map((m) =>
         m.status === 'floating' ? { ...m, status: 'sunken' as const } : m
       );
       const hasChanged = clearedMessages.some((m, i) => m.status !== state.messages[i].status);
 
-      // 从昨天的投票中提取胜出选项的目的地
       let tomorrowLandmark: string | undefined;
       if (state.dailyVote && state.dailyVote.totalVotes > 0) {
         const maxIdx = state.dailyVote.voteCounts.indexOf(Math.max(...state.dailyVote.voteCounts));
@@ -2450,16 +2461,12 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         todayLandmarksVisited: [], todayEncounters: [],
         landmarkStayDurations: {}, lastStayStartTime: Date.now(),
         lastCrossDayReset: Date.now(),
-        // 清除昨天的投票/传闻引用，等待新数据
-        dailyVote: null,
-        campusRumor: null,
-        dailyNewspaper: null,
+        dailyVote: actuallyCrossDay ? null : state.dailyVote,
+        campusRumor: actuallyCrossDay ? null : state.campusRumor,
+        dailyNewspaper: actuallyCrossDay ? null : state.dailyNewspaper,
         messages: hasChanged ? clearedMessages : state.messages,
-        // 重置礼物标记
         giftFlags: { hasUmbrella: false, hasCamera: false, hasHeadphone: false, hasScarf: false, hasFlower: false },
-        // 重置投票仪式
         voteRitualDone: false, voteRitualLabel: '',
-        // 投票决定明天出发点
         ...(tomorrowLandmark ? { currentLandmarkId: tomorrowLandmark } : {}),
       });
       localSave(get());
