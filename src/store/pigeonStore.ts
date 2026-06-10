@@ -141,6 +141,11 @@ interface DbDailyNewspaper {
 // ============================================================
 const LS_KEY = 'sjtu-campus-pigeon';
 
+function isResetProtected(): boolean {
+  const ts = usePigeonStore.getState().lastCrossDayReset;
+  return ts > 0 && (Date.now() - ts < 60000);
+}
+
 function loadLocalState(): Record<string, unknown> {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -280,6 +285,7 @@ function localSave(s: PigeonStoreFull) {
     giftFlags: s.giftFlags,
     unlockedFootprints: s.unlockedFootprints,
     voteRitualDone: s.voteRitualDone,
+    lastCrossDayReset: s.lastCrossDayReset,
   });
 }
 
@@ -566,6 +572,9 @@ interface PigeonState {
   voteRitualDone: boolean;
   voteRitualLabel: string;
 
+  // 跨天保护标记：清零后60秒内拒绝云端旧值覆盖
+  lastCrossDayReset: number;
+
   initFromCloud: () => Promise<void>;
   feedPigeon: (itemId: FeedItemId) => void;
   tickPigeonAI: () => void;
@@ -712,6 +721,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
   voteRitualDone: false,
   voteRitualLabel: '',
+  lastCrossDayReset: 0,
 
   // ============ 从云端初始化 ============
   initFromCloud: async () => {
@@ -737,6 +747,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           inner.voteRitualDone = false;
           inner.voteRitualLabel = '';
           inner.giftFlags = { hasUmbrella: false, hasCamera: false, hasHeadphone: false, hasScarf: false, hasFlower: false };
+          inner.lastCrossDayReset = Date.now();
           const newRaw = JSON.stringify({ state: inner, version: parsed.version || 0 });
           localStorage.setItem(LS_KEY, newRaw);
         }
@@ -821,12 +832,12 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         const todayTotals = { ...cur.todayFeedTotals };
         // 如果本地日期已是今天才信任云端 today_count，否则忽略（防跨天残留）
         const localDateIsToday = cur.todayDate === today;
+        const skipCloudToday = isResetProtected(); // 刚跨天清零 → 60秒内不接云端旧值
         for (const f of feedData) {
           totals[f.item_id] = Math.max(totals[f.item_id] || 0, f.count);
-          if (localDateIsToday && f.today_count > 0) {
+          if (!skipCloudToday && localDateIsToday && f.today_count > 0) {
             todayTotals[f.item_id] = Math.max(todayTotals[f.item_id] || 0, f.today_count);
           }
-          // 本地日期不是今天 → 保留 local todayTotals，不合并云端旧值
         }
         set({ feedTotals: totals, todayFeedTotals: todayTotals });
         console.log('[pigeon] initFromCloud STEP2 feed_totals merged — todayFeedTotals:', JSON.stringify(todayTotals), 'localDateIsToday:', localDateIsToday);
@@ -947,9 +958,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         // 核心安全规则：云端 todayFeedCount 仅当 cloudDate 严格匹配 today 且本地 already has data 时参考
         // 否则绝不覆盖，防止跨天残留
         const localDateMatches = cur.todayDate === today;
-        const safeTodayFeedCount = (cloudDate === today && localDateMatches)
-          ? Math.max(cur.todayFeedCount, tm.today_feed_count || 0)
-          : cur.todayFeedCount;
+        const safeTodayFeedCount = isResetProtected()
+          ? 0  // 保护期内，强制用本地0
+          : (cloudDate === today && localDateMatches)
+            ? Math.max(cur.todayFeedCount, tm.today_feed_count || 0)
+            : cur.todayFeedCount;
 
         if (cloudDate === today) {
           const hasYesterdayJournal =
@@ -1080,9 +1093,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           const cur = get();
           set({
             todayDate: tm.today_date || cur.todayDate,
-            // 本地刚重置（=0）时不接受云端旧值覆盖
-            todayFeedCount: cur.todayFeedCount === 0
-              ? 0
+            // 保护期内或本地刚重置（=0）时不接受云端旧值覆盖
+            todayFeedCount: (isResetProtected() || cur.todayFeedCount === 0)
+              ? cur.todayFeedCount
               : Math.max(tm.today_feed_count ?? 0, cur.todayFeedCount),
             todayLandmarksVisited: tm.today_landmarks_visited || cur.todayLandmarksVisited,
             todayEncounters: tm.today_encounters || cur.todayEncounters,
@@ -1859,8 +1872,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             // 只合并云端日期匹配且值 >0 的项；不创建 0 值条目
             // 安全：本地刚重置（empty object）时，不用云端旧值覆盖
             const localEmpty = Object.keys(cur.todayFeedTotals).length === 0;
+            const protectToday = isResetProtected() || localEmpty;
             const cloudVal = todayTotals[k];
-            if (cloudDateMatches && cloudVal > 0 && !localEmpty) {
+            if (cloudDateMatches && cloudVal > 0 && !protectToday) {
               mergedToday[k] = Math.max(cur.todayFeedTotals[k] || 0, cloudVal);
             } else if (cur.todayFeedTotals[k] > 0) {
               mergedToday[k] = cur.todayFeedTotals[k];
@@ -1870,12 +1884,13 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           return {
             feedTotals: merged,
             todayFeedTotals: mergedToday,
-            // 安全：如果本地已重置为0（刚跨天），不用云端旧值覆盖
-            todayFeedCount: cloudDateMatches
-              ? (cur.todayFeedCount === 0
-                  ? 0  // 本地刚重置 → 保留0，不接受旧云端计数
-                  : (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount))
-              : cur.todayFeedCount,
+            todayFeedCount: isResetProtected()
+              ? 0
+              : cloudDateMatches
+                ? (cur.todayFeedCount === 0
+                    ? 0
+                    : (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount))
+                : cur.todayFeedCount,
           };
         });
         localSave(get());
@@ -2430,6 +2445,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         todayDate: today, todayFeedTotals: {}, todayFeedCount: 0,
         todayLandmarksVisited: [], todayEncounters: [],
         landmarkStayDurations: {}, lastStayStartTime: Date.now(),
+        lastCrossDayReset: Date.now(),
         // 清除昨天的投票/传闻引用，等待新数据
         dailyVote: null,
         campusRumor: null,
