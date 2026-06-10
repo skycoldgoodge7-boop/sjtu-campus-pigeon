@@ -29,7 +29,7 @@ import {
   type JournalContext, type VoteGenContext, type TopicGenContext, type NewspaperContext,
 } from '../utils/ai';
 import { getFallbackQuestion, getFallbackTopic } from '../data/fallbackQuestions';
-import { getCollectibleForLandmark, findCollectibleStory } from '../data/backpackItems';
+import { getCollectibleForLandmark, findCollectibleStory, LANDMARK_ID_TO_NAME } from '../data/backpackItems';
 import { landmarkPhotos } from '../data/photoGallery';
 
 // ============================================================
@@ -1765,16 +1765,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     return get().pastNewspapers;
   },
 
+  // unlockFootprintPhoto 保留为工具函数（当前日记生成处内联了解锁逻辑，此函数作为备用入口）
   unlockFootprintPhoto: (landmarkId: string) => {
-    // 每到达一次地标，解锁该地标下一张未解锁的照片
-    const LANDMARK_ID_TO_NAME: Record<string, string> = {
-      'siyuan-lake': '思源湖', 'new-library': '图书馆', 'temple-gate': '庙门',
-      'botanical-garden': '植物园', 'seiee-lawn': '电院大草坪', 'zhiyuan-lake': '致远湖',
-      'dining-hall-1': '第一餐饮大楼', 'south-stadium': '南区体育场', 'nan-da-men': '南大门',
-      'siyuan-men': '思源门', 'east-middle': '东中院', 'design-school': '设计学院',
-      'humanities-school': '人文学院', 'east-lower': '东下院', 'hufaguang-stadium': '胡法光体育场',
-      'seiee-complex': '电院', 'tuxin-building': '图信大楼',
-    };
     const name = LANDMARK_ID_TO_NAME[landmarkId];
     if (!name || !landmarkPhotos[name]) return;
 
@@ -2645,16 +2637,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
     // 按当天访问的地标解锁足迹照片（每天每地标一张）
     const visitedIds = state.todayLandmarksVisited.length > 0 ? state.todayLandmarksVisited : [state.currentLandmarkId];
-    const LANDMARK_TO_NAME: Record<string, string> = {
-      'siyuan-lake': '思源湖', 'new-library': '图书馆', 'temple-gate': '庙门',
-      'botanical-garden': '植物园', 'seiee-lawn': '电院大草坪', 'zhiyuan-lake': '致远湖',
-      'dining-hall-1': '第一餐饮大楼', 'south-stadium': '南区体育场', 'nan-da-men': '南大门',
-      'siyuan-men': '思源门', 'east-middle': '东中院', 'design-school': '设计学院',
-      'humanities-school': '人文学院', 'east-lower': '东下院', 'hufaguang-stadium': '胡法光体育场',
-      'seiee-complex': '电院', 'tuxin-building': '图信大楼',
-    };
     for (const vid of [...new Set(visitedIds)]) {
-      const name = LANDMARK_TO_NAME[vid];
+      const name = LANDMARK_ID_TO_NAME[vid];
       if (!name || !landmarkPhotos[name]) continue;
       const allPhotos = landmarkPhotos[name];
       const curUnlocked = new Set(get().unlockedFootprints);

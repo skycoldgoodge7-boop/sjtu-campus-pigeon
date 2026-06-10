@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { usePigeonStore } from '../store/pigeonStore';
 import { landmarkPhotos, pickCaption } from '../data/photoGallery';
+import { LANDMARK_ID_TO_NAME as LANDMARK_TO_NAME } from '../data/backpackItems';
 import type { DailyJournal } from '../types';
 import type { LandmarkPhoto } from '../data/photoGallery';
 
@@ -17,16 +18,6 @@ export default function DailyJournal() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  };
-
-  // 地标ID→中文名
-  const LANDMARK_TO_NAME: Record<string, string> = {
-    'siyuan-lake': '思源湖', 'new-library': '图书馆', 'temple-gate': '庙门',
-    'botanical-garden': '植物园', 'seiee-lawn': '电院大草坪', 'zhiyuan-lake': '致远湖',
-    'dining-hall-1': '第一餐饮大楼', 'south-stadium': '南区体育场', 'nan-da-men': '南大门',
-    'siyuan-men': '思源门', 'east-middle': '东中院', 'design-school': '设计学院',
-    'humanities-school': '人文学院', 'east-lower': '东下院', 'hufaguang-stadium': '胡法光体育场',
-    'seiee-complex': '电院', 'tuxin-building': '图信大楼',
   };
 
   // 根据日记的 landmarksVisited 匹配当天照片（每地标取第一张已解锁的）

@@ -116,6 +116,16 @@ const COLLECTIBLES: Record<string, LandmarkCollectible[]> = {
   ],
 };
 
+/** 地标ID→中文名（全项目统一，避免多处重复定义） */
+export const LANDMARK_ID_TO_NAME: Record<string, string> = {
+  'siyuan-lake': '思源湖', 'new-library': '图书馆', 'temple-gate': '庙门',
+  'botanical-garden': '植物园', 'seiee-lawn': '电院大草坪', 'zhiyuan-lake': '致远湖',
+  'dining-hall-1': '第一餐饮大楼', 'south-stadium': '南区体育场', 'nan-da-men': '南大门',
+  'siyuan-men': '思源门', 'east-middle': '东中院', 'design-school': '设计学院',
+  'humanities-school': '人文学院', 'east-lower': '东下院', 'hufaguang-stadium': '胡法光体育场',
+  'seiee-complex': '电院', 'tuxin-building': '图信大楼',
+};
+
 export function getCollectibleForLandmark(landmarkId: string): LandmarkCollectible | null {
   const items = COLLECTIBLES[landmarkId];
   if (!items || items.length === 0) return null;
