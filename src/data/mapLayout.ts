@@ -69,9 +69,9 @@ export const LANDMARK_CONFIGS: LandmarkConfig[] = [
 
 // ── 停留时间 ──
 export const STAY_TIMES: Record<ZoneLevel, { min: number; max: number }> = {
-  core:   { min: 1800000, max: 3600000 },
-  medium: { min: 2400000, max: 5400000 },
-  rare:   { min: 1800000, max: 3600000 },
+  core:   { min: 600000,  max: 1500000 },  // 10-25分钟
+  medium: { min: 900000,  max: 2100000 },  // 15-35分钟
+  rare:   { min: 600000,  max: 1500000 },  // 10-25分钟
 };
 
 // ── 屏幕坐标 — 基于手绘地图底图精确标注 ──

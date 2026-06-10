@@ -788,17 +788,20 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
       if (feedData.length) {
         const cur = get();
+        const today = getTodayDateString();
         const totals = { ...cur.feedTotals };
         const todayTotals = { ...cur.todayFeedTotals };
+        // 如果本地日期已是今天才信任云端 today_count，否则忽略（防跨天残留）
+        const localDateIsToday = cur.todayDate === today;
         for (const f of feedData) {
           totals[f.item_id] = Math.max(totals[f.item_id] || 0, f.count);
-          // 只合并云端有值的项（>0），避免用 0 污染本地
-          if (f.today_count > 0) {
+          if (localDateIsToday && f.today_count > 0) {
             todayTotals[f.item_id] = Math.max(todayTotals[f.item_id] || 0, f.today_count);
           }
+          // 本地日期不是今天 → 保留 local todayTotals，不合并云端旧值
         }
         set({ feedTotals: totals, todayFeedTotals: todayTotals });
-        console.log('[pigeon] initFromCloud STEP2 feed_totals merged — todayFeedTotals:', JSON.stringify(todayTotals));
+        console.log('[pigeon] initFromCloud STEP2 feed_totals merged — todayFeedTotals:', JSON.stringify(todayTotals), 'localDateIsToday:', localDateIsToday);
       }
 
       const cur = get();
@@ -906,27 +909,37 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         const today = getTodayDateString();
         const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
 
-        // 辅助：合并足迹（取并集）和 API key（取任意非空值）
+        // 辅助：合并足迹（取并集）
         const mergedFootprints = [...new Set([
           ...cur.unlockedFootprints,
           ...(tm.unlocked_footprints || []),
         ])];
         // zhipuApiKey 仅本地保留，不从云端合并
 
+        // 核心安全规则：云端 todayFeedCount 仅当 cloudDate 严格匹配 today 且本地 already has data 时参考
+        // 否则绝不覆盖，防止跨天残留
+        const localDateMatches = cur.todayDate === today;
+        const safeTodayFeedCount = (cloudDate === today && localDateMatches)
+          ? Math.max(cur.todayFeedCount, tm.today_feed_count || 0)
+          : cur.todayFeedCount;
+
         if (cloudDate === today) {
           const hasYesterdayJournal =
             cur.journalEntries.some((j: DailyJournal) => j.date === yesterday) ||
             journalData.some((j: DbJournal) => j.date === yesterday);
           if (!hasYesterdayJournal && cur.todayDate !== today) {
+            // 刚跨天且没有昨天日记 → 只合并非计数字段，todayFeedCount 保留 local（可能是0）
             set({
               characterTraces: { ...cur.characterTraces, ...(tm.character_traces || {}) },
               moodStreaks: { ...cur.moodStreaks, ...(tm.mood_streaks || {}) },
               unlockedFootprints: mergedFootprints,
             });
           } else {
+            // 不要让云端的 today_date 抢在 resetTodayIfNeeded 之前改成今天
+            // 本地日期已正确 → 正常合并；本地日期不对 → 保留旧日期等 resetTodayIfNeeded 触发
             set({
-              todayDate: today,
-              todayFeedCount: Math.max(cur.todayFeedCount, tm.today_feed_count || 0),
+              todayDate: localDateMatches ? today : cur.todayDate,
+              todayFeedCount: safeTodayFeedCount,
               todayLandmarksVisited: tm.today_landmarks_visited || [],
               todayEncounters: tm.today_encounters || [],
               characterTraces: tm.character_traces || {},
@@ -941,9 +954,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             unlockedFootprints: mergedFootprints,
           });
         } else {
+          // cloudDate !== today 且 !== yesterday → 保留本地 todayDate 和 todayFeedCount
           set({
-            todayDate: today,
-            todayFeedCount: Math.max(cur.todayFeedCount, tm.today_feed_count || 0),
+            todayDate: localDateMatches ? today : cur.todayDate,
+            todayFeedCount: cur.todayFeedCount,
             todayLandmarksVisited: cur.todayLandmarksVisited,
             todayEncounters: cur.todayEncounters,
             characterTraces: tm.character_traces || {},
@@ -1038,7 +1052,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           const cur = get();
           set({
             todayDate: tm.today_date || cur.todayDate,
-            todayFeedCount: Math.max(tm.today_feed_count ?? 0, cur.todayFeedCount),
+            // 本地刚重置（=0）时不接受云端旧值覆盖
+            todayFeedCount: cur.todayFeedCount === 0
+              ? 0
+              : Math.max(tm.today_feed_count ?? 0, cur.todayFeedCount),
             todayLandmarksVisited: tm.today_landmarks_visited || cur.todayLandmarksVisited,
             todayEncounters: tm.today_encounters || cur.todayEncounters,
             characterTraces: tm.character_traces || cur.characterTraces,
@@ -2075,8 +2092,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       }
     }
 
-    // P2: 投票仪式感 — 22:00 后鸽子飞向投票胜出地标
-    if (hour >= 22 && !state.voteRitualDone && state.dailyVote && state.dailyVote.totalVotes > 0 && state.pigeonActivity !== 'walking') {
+    // P2: 投票仪式感 — 白天偶发，22点后必发
+    const shouldRitual = hour >= 22
+      ? true  // 晚上 22 点后必触发
+      : hour >= 8 && !state.voteRitualDone && Math.random() < 0.15;  // 白天 15% 几率每次 tick 检查
+    if (shouldRitual && !state.voteRitualDone && state.dailyVote && state.dailyVote.totalVotes > 0 && state.pigeonActivity !== 'walking') {
       const maxIdx = state.dailyVote.voteCounts.indexOf(Math.max(...state.dailyVote.voteCounts));
       const winner = state.dailyVote.options[maxIdx];
       if (winner?.targetLandmark && winner.targetLandmark !== state.currentLandmarkId) {
