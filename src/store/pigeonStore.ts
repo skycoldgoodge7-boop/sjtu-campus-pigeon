@@ -984,8 +984,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             set({
               todayDate: localDateMatches ? today : cur.todayDate,
               todayFeedCount: safeTodayFeedCount,
-              todayLandmarksVisited: tm.today_landmarks_visited || [],
-              todayEncounters: tm.today_encounters || [],
+              // 保护期内保留本地空数组，不接受云端旧值
+              todayLandmarksVisited: isResetProtected() ? cur.todayLandmarksVisited : (tm.today_landmarks_visited || []),
+              todayEncounters: isResetProtected() ? cur.todayEncounters : (tm.today_encounters || []),
               characterTraces: tm.character_traces || {},
               moodStreaks: tm.mood_streaks || {},
               unlockedFootprints: mergedFootprints,
@@ -1100,8 +1101,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             todayFeedCount: (isResetProtected() || cur.todayFeedCount === 0)
               ? cur.todayFeedCount
               : Math.max(tm.today_feed_count ?? 0, cur.todayFeedCount),
-            todayLandmarksVisited: tm.today_landmarks_visited || cur.todayLandmarksVisited,
-            todayEncounters: tm.today_encounters || cur.todayEncounters,
+            todayLandmarksVisited: isResetProtected() ? cur.todayLandmarksVisited : (tm.today_landmarks_visited || cur.todayLandmarksVisited),
+            todayEncounters: isResetProtected() ? cur.todayEncounters : (tm.today_encounters || cur.todayEncounters),
             characterTraces: tm.character_traces || cur.characterTraces,
             moodStreaks: tm.mood_streaks || cur.moodStreaks,
             // 足迹取并集（多设备各自解锁的不同照片合并）
