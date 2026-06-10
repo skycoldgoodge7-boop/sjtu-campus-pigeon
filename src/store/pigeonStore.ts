@@ -1812,8 +1812,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           for (const k of allKeys) {
             merged[k] = Math.max(cur.feedTotals[k] || 0, totals[k] || 0);
             // 只合并云端日期匹配且值 >0 的项；不创建 0 值条目
+            // 安全：本地刚重置（empty object）时，不用云端旧值覆盖
+            const localEmpty = Object.keys(cur.todayFeedTotals).length === 0;
             const cloudVal = todayTotals[k];
-            if (cloudDateMatches && cloudVal > 0) {
+            if (cloudDateMatches && cloudVal > 0 && !localEmpty) {
               mergedToday[k] = Math.max(cur.todayFeedTotals[k] || 0, cloudVal);
             } else if (cur.todayFeedTotals[k] > 0) {
               mergedToday[k] = cur.todayFeedTotals[k];
@@ -1823,8 +1825,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           return {
             feedTotals: merged,
             todayFeedTotals: mergedToday,
+            // 安全：如果本地已重置为0（刚跨天），不用云端旧值覆盖
             todayFeedCount: cloudDateMatches
-              ? (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount)
+              ? (cur.todayFeedCount === 0
+                  ? 0  // 本地刚重置 → 保留0，不接受旧云端计数
+                  : (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount))
               : cur.todayFeedCount,
           };
         });
@@ -1959,6 +1964,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
   feedPigeon: (itemId: FeedItemId) => {
     const state = get();
     state.resetTodayIfNeeded();
+    // resetTodayIfNeeded 可能改了 todayFeedCount，重新读取避免 stale state
+    const fresh = get();
     const item = feedItems.find((f) => f.id === itemId);
     if (!item) return;
 
@@ -1976,8 +1983,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const balancedMood = normalizeMood(newMood);
 
     const logEntry: FeedLogEntry = { itemId, itemEmoji: item.emoji, itemName: item.name, timestamp: Date.now() };
-    const newTotals = { ...state.feedTotals, [itemId]: (state.feedTotals[itemId] || 0) + 1 };
-    const newTodayTotals = { ...state.todayFeedTotals, [itemId]: (state.todayFeedTotals[itemId] || 0) + 1 };
+    const newTotals = { ...fresh.feedTotals, [itemId]: (fresh.feedTotals[itemId] || 0) + 1 };
+    const newTodayTotals = { ...fresh.todayFeedTotals, [itemId]: (fresh.todayFeedTotals[itemId] || 0) + 1 };
 
     // 礼物行为标记
     const giftUpdates: Partial<GiftFlags> = {};
@@ -1993,7 +2000,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     set({
       feedTotals: newTotals,
       todayFeedTotals: newTodayTotals,
-      todayFeedCount: state.todayFeedCount + 1,
+      todayFeedCount: fresh.todayFeedCount + 1,
       mood: balancedMood,
       pigeonActivity: 'eating',
       lastActivityTimestamp: Date.now(),
@@ -2097,6 +2104,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           if (get().targetLandmarkId === winner.targetLandmark && get().pigeonActivity === 'walking') {
             set({ currentLandmarkId: winner.targetLandmark!, targetLandmarkId: null, pigeonActivity: 'idle', currentPath: null });
             get().collectBackpackItem(winner.targetLandmark!);
+            checkEncounters(get, winner.targetLandmark!, new Date().getHours(), get().mood);
             // 足迹照片在日记生成时统一解锁
             localSave(get());
             setTimeout(() => cloudSyncState(get()), 50);
@@ -2177,8 +2185,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
               pigeonActivity: 'idle',
               currentPath: null,
             });
-            // 首次到达地标 → 收集背包物品
+            // 首次到达地标 → 收集背包物品 + 遇见检查
             get().collectBackpackItem(dest);
+            checkEncounters(get, dest, new Date().getHours(), get().mood);
             // 足迹照片在日记生成时统一解锁
             localSave(get());
             setTimeout(() => cloudSyncState(get()), 50);
@@ -2193,7 +2202,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     localSave(get());
     setTimeout(() => cloudSyncState(get()), 50);
 
-    if (Math.random() < 0.10) {
+    // 每次 tick 都 check（原本 10% 太低，几小时遇不到一次）
+    if (Math.random() < 0.35) {
       checkEncounters(get, state.currentLandmarkId, hour, state.mood);
     }
   },
