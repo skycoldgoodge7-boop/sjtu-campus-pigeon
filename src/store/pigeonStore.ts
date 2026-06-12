@@ -24,7 +24,6 @@ import {
 import {
   enhanceJournalContent, generateDailyVoteQuestion,
   generateDailyTopicContent, enhanceNewspaperContent, generateNewspaperHeadline,
-  generatePigeonNoteReply,
   type JournalContext, type VoteGenContext, type TopicGenContext, type NewspaperContext,
 } from '../utils/ai';
 import { getFallbackQuestion, getFallbackTopic } from '../data/fallbackQuestions';
@@ -2386,78 +2385,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     localSave(get());
     setTimeout(() => cloudSyncMessage(updated.find((m) => m.id === picked.id)!), 50);
 
-    // 异步生成鸽子回复
-    const apiKey = state.zhipuApiKey;
-    const today = getTodayDateString();
-
-    const storeReply = (reply: string) => {
-      set({ lastBottleReply: { noteText: picked.text, reply } });
-      // 5秒后清除
-      setTimeout(() => {
-        if (get().lastBottleReply?.noteText === picked.text) {
-          set({ lastBottleReply: null });
-        }
-      }, 8000);
-
-      // 更新或创建今日日记中的纸条和回复
-      const curJournals = get().journalEntries;
-      const journalId = `journal-${today}`;
-      const existingIdx = curJournals.findIndex((j) => j.id === journalId);
-      if (existingIdx >= 0) {
-        const updatedJournal = {
-          ...curJournals[existingIdx],
-          pickedNote: curJournals[existingIdx].pickedNote || picked.text,
-          pigeonReply: reply,
-        };
-        const newJournals = [...curJournals];
-        newJournals[existingIdx] = updatedJournal;
-        set({ journalEntries: newJournals });
-        localSave(get());
-        setTimeout(() => cloudSyncJournal(updatedJournal), 50);
-      } else {
-        const lm = landmarks.find((l) => l.id === state.currentLandmarkId);
-        const tempJournal: DailyJournal = {
-          id: journalId,
-          date: today,
-          feedCount: state.todayFeedCount,
-          topFeedItem: '面包',
-          topFeedCount: 0,
-          specialItems: [],
-          landmarksVisited: state.todayLandmarksVisited,
-          mostStayedLandmark: lm?.name || '校园',
-          nightActivity: null,
-          campusState: 'normal',
-          hasUmbrella: false,
-          pickedNote: picked.text,
-          pigeonReply: reply,
-          content: `今天鸽子捡到了一张纸条：「${picked.text}」\n鸽子回复：「${reply}」`,
-        };
-        // 🔧 去重：已在 generateDailyJournal 中创建了完整日记的不重复
-        set((s) => {
-          const deduped = s.journalEntries.filter((j) => j.id !== journalId);
-          return { journalEntries: [tempJournal, ...deduped].slice(0, 30) };
-        });
-        localSave(get());
-        setTimeout(() => cloudSyncJournal(tempJournal), 50);
-      }
-    };
-
-    if (apiKey) {
-      generatePigeonNoteReply(apiKey, picked.text, today).then((reply) => {
-        if (reply) storeReply(reply);
-      });
-    } else {
-      // 没有 API key 时使用兜底回复
-      const fallbackReplies = [
-        '咕咕看到了你的纸条！虽然不知道是谁写的，但希望你能开心。',
-        '纸条收到了！鸽子觉得写得很好，给你点个赞！',
-        '咕~ 这张纸条真有意思。鸽子会好好保存的。',
-        '收到啦！鸽子在校园里飞来飞去的时候会想着这张纸条的。',
-        '谢谢你分享这些。鸽子虽然不会说话，但它用翅膀给你比了个心。',
-      ];
-      storeReply(fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)]);
-    }
-
+    // 纸条仅做展示，不生成 AI 回复
     return picked;
   },
 
@@ -2702,7 +2630,6 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     // 每天只捡一张漂流瓶 — 取最早未拾取的纸条
     let bottleLine = '';
     let pickedNote: string | undefined;
-    let pigeonReply: string | undefined;
     const floatingBottles = state.messages.filter((m) => m.status === 'floating');
     if (floatingBottles.length > 0) {
       const picked = floatingBottles[floatingBottles.length - 1]; // 最早的那条
@@ -2713,27 +2640,6 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       setTimeout(() => cloudSyncMessage(updated.find((m) => m.id === picked.id)!), 50);
       pickedNote = picked.text;
       bottleLine = `\n今天它捡到了一张纸条：\n"${picked.text}"\n`;
-
-      // 生成鸽子对纸条的回复（异步，不阻塞日记生成）
-      const noteReplyApiKey = state.zhipuApiKey;
-      if (noteReplyApiKey) {
-        generatePigeonNoteReply(noteReplyApiKey, picked.text, yesterday).then((reply) => {
-          if (reply) {
-            pigeonReply = reply;
-            // 更新日记中的回复
-            const curJournals = get().journalEntries;
-            const targetIdx = curJournals.findIndex((j) => j.id === `journal-${yesterday}`);
-            if (targetIdx >= 0) {
-              const updatedJournal = { ...curJournals[targetIdx], pigeonReply: reply };
-              const newJournals = [...curJournals];
-              newJournals[targetIdx] = updatedJournal;
-              set({ journalEntries: newJournals });
-              localSave(get());
-              setTimeout(() => cloudSyncJournal(updatedJournal), 50);
-            }
-          }
-        });
-      }
     }
 
     const topItemName = feedItems.find((f) => f.id === topItem)?.name || topItem;
@@ -2863,7 +2769,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       topFeedItem: topItemName, topFeedCount: topCount, specialItems,
       landmarksVisited: visitedIds,
       mostStayedLandmark: mostStayedLm?.name || '思源湖', nightActivity, campusState,
-      hasUmbrella: (state.feedTotals['umbrella'] || 0) > 0, pickedNote, pigeonReply, content,
+      hasUmbrella: (state.feedTotals['umbrella'] || 0) > 0, pickedNote, content,
     };
 
     set((s) => {

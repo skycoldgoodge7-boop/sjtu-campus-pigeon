@@ -78,7 +78,6 @@ export default function DailyJournal() {
         <div>还没有校园记录</div>
         <div style={{ fontSize: '0.85em', opacity: 0.7 }}>每天凌晨自动生成</div>
         <div style={{ fontSize: '0.85em', opacity: 0.7 }}>记录这一天的校园故事</div>
-        <ForceGenerateButton />
       </div>
     );
   }
@@ -159,11 +158,6 @@ export default function DailyJournal() {
         )}
       </div>
 
-      {/* Force generate button */}
-      <div style={{ marginTop: 12, textAlign: 'center' }}>
-        <ForceGenerateButton />
-      </div>
-
       {/* Past journals */}
       {journals.length > 1 && (
         <div style={{ marginTop: 24 }}>
@@ -235,16 +229,6 @@ export default function DailyJournal() {
                       📝 捡到纸条：「{j.pickedNote}」
                     </div>
                   )}
-                  {j.pigeonReply && (
-                    <div style={{
-                      marginTop: 6, padding: '8px 12px',
-                      background: 'rgba(196,119,107,0.06)',
-                      borderRadius: 10, fontSize: '0.85em', opacity: 0.85,
-                      lineHeight: 1.6, border: '1px solid rgba(196,119,107,0.1)',
-                    }}>
-                      🕊️ 鸽子回复：「{j.pigeonReply}」
-                    </div>
-                  )}
                   {isExpanded && (
                     <div style={{
                       whiteSpace: 'pre-line',
@@ -290,33 +274,3 @@ export default function DailyJournal() {
   );
 }
 
-// 手动生成昨日记录按钮
-function ForceGenerateButton() {
-  const [msg, setMsg] = useState('');
-  const generate = () => {
-    const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
-    const s = usePigeonStore.getState();
-    s.generateDailyJournal(yesterday);
-    setTimeout(() => s.generateDailyNewspaper(), 1500);
-    setMsg('已触发生成，稍等几秒刷新');
-    setTimeout(() => setMsg(''), 4000);
-  };
-  return (
-    <div>
-      <button
-        onPointerDown={generate}
-        style={{
-          marginTop: 12, border: '1px solid rgba(196,119,107,0.2)',
-          borderRadius: 12, padding: '8px 16px',
-          background: 'rgba(196,119,107,0.04)',
-          cursor: 'pointer', color: '#8B7355',
-          fontSize: 'clamp(10px, 0.8vw, 12px)',
-        }}>
-        🔄 手动生成昨日记录
-      </button>
-      {msg && (
-        <div style={{ marginTop: 6, fontSize: 11, color: '#C4776B' }}>{msg}</div>
-      )}
-    </div>
-  );
-}

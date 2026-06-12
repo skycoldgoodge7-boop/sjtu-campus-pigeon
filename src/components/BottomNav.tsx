@@ -15,12 +15,13 @@ import BackpackView from './BackpackView';
 import SHARDS from '../data/memoryShards';
 import { landmarkPhotos, pickCaption } from '../data/photoGallery';
 
-type TabId = 'journal' | 'newspaper' | 'collection' | 'mailbox';
+type TabId = 'journal' | 'newspaper' | 'collection' | 'stats' | 'mailbox';
 
 const NAV_ITEMS: { id: TabId; emoji: string; label: string }[] = [
   { id: 'journal',    emoji: '📖', label: '日记' },
   { id: 'newspaper',  emoji: '📰', label: '鸽报' },
   { id: 'collection', emoji: '📚', label: '图鉴' },
+  { id: 'stats',      emoji: '🪶', label: '成长' },
   { id: 'mailbox',    emoji: '💌', label: '信箱' },
 ];
 
@@ -171,38 +172,11 @@ function BottomSheetContent({ tab, onClose }: { tab: string; onClose: () => void
         {/* Content */}
         <div style={{ flex: 1, overflow: 'auto' }}>
           {tab === 'journal'    && <DailyJournal />}
-          {tab === 'newspaper'  && <NewspaperWithStats />}
+          {tab === 'newspaper'  && <DailyNewspaper />}
           {tab === 'collection' && <CollectionView />}
+          {tab === 'stats'      && <StatsDashboard />}
           {tab === 'mailbox'    && <MessageStream />}
         </div>
-      </div>
-    </div>
-  );
-}
-
-// ====== 鸽报 + 统计（合并在一个面板） ======
-function NewspaperWithStats() {
-  const [showStats, setShowStats] = useState(false);
-  return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, overflow: 'auto' }}>
-        {showStats ? <StatsDashboard /> : <DailyNewspaper />}
-      </div>
-      <div style={{
-        padding: '8px 16px', borderTop: '1px solid rgba(0,0,0,0.04)',
-        display: 'flex', justifyContent: 'center',
-      }}>
-        <button
-          onPointerDown={() => { setShowStats((v) => !v); haptic('tap'); }}
-          style={{
-            border: 'none', borderRadius: 14,
-            background: 'rgba(139,115,85,0.06)',
-            padding: '6px 16px', cursor: 'pointer',
-            fontSize: 12, color: '#8B7355', fontWeight: 500,
-          }}
-        >
-          {showStats ? '📰 看鸽报' : '🪶 成长记录'}
-        </button>
       </div>
     </div>
   );
@@ -526,25 +500,14 @@ function MessageStream() {
   const messages = usePigeonStore((s) => s.messages);
   const postMessage = usePigeonStore((s) => s.postMessage);
   const retrieveBottle = usePigeonStore((s) => s.retrieveBottle);
-  const lastBottleReply = usePigeonStore((s) => s.lastBottleReply);
   const [text, setText] = useState('');
   const [emoji, setEmoji] = useState('💌');
   const lastPostRef = useRef(0);
   const lastRetrieveRef = useRef(0);
   const [retrievedBottle, setRetrievedBottle] = useState<DriftBottle | null>(null);
   const [revealBottle, setRevealBottle] = useState(false);
-  const [showReply, setShowReply] = useState(false);
 
   const EMOJIS = ['💌', '❤️', '😊', '📝', '🍀', '🌟', '💪', '🕊️', '🌸', '🎓', '☕', '🍞'];
-
-  // 监听鸽子的回复
-  useEffect(() => {
-    if (lastBottleReply && retrievedBottle && lastBottleReply.noteText === retrievedBottle.text) {
-      // 延迟显示回复，给纸条展开动画时间
-      const t = setTimeout(() => setShowReply(true), 1500);
-      return () => clearTimeout(t);
-    }
-  }, [lastBottleReply, retrievedBottle]);
 
   const handleSend = () => {
     if (!text.trim()) return;
@@ -559,7 +522,6 @@ function MessageStream() {
     if (Date.now() - lastRetrieveRef.current < 30000) return;
     lastRetrieveRef.current = Date.now();
     haptic('retrieve');
-    setShowReply(false);
     const bottle = retrieveBottle();
     if (bottle) {
       setRetrievedBottle(bottle);
@@ -607,26 +569,6 @@ function MessageStream() {
               {revealBottle ? '—— 漂流中的纸条' : '纸条正在展开...'}
             </div>
 
-            {/* 鸽子回复 */}
-            {showReply && lastBottleReply && (
-              <div style={{
-                marginTop: 12, padding: '12px 16px',
-                background: 'rgba(196,119,107,0.08)',
-                borderRadius: 12,
-                border: '1px solid rgba(196,119,107,0.15)',
-                animation: 'fadeInUp 0.5s ease both',
-              }}>
-                <div style={{ fontSize: 'clamp(10px, 0.8vw, 12px)', color: '#C4776B', fontWeight: 600, marginBottom: 4 }}>
-                  🕊️ 鸽子回复了这张纸条：
-                </div>
-                <div style={{
-                  fontSize: 'clamp(13px, 1.1vw, 16px)', color: '#4A3728',
-                  lineHeight: 1.7, fontWeight: 500,
-                }}>
-                  「{lastBottleReply.reply}」
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
