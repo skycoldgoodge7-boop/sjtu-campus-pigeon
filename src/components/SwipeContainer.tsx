@@ -63,12 +63,9 @@ export default function SwipeContainer({
     }
   }, [isDragging, currentScreen]);
 
-  const handleUp = useCallback((e: React.PointerEvent) => {
-    if (!isDragging) return;
+  const finishSwipe = useCallback((clientX: number) => {
     setIsDragging(false);
-    try { (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); } catch {}
-
-    const dx = e.clientX - startX.current;
+    const dx = clientX - startX.current;
 
     if (Math.abs(dx) < THRESHOLD || !movedRef.current) {
       setIsAnimating(true);
@@ -85,7 +82,21 @@ export default function SwipeContainer({
       haptic('swipe');
     }
     setOffset(0);
-  }, [isDragging, currentScreen, setScreen]);
+  }, [currentScreen, setScreen]);
+
+  const handleUp = useCallback((e: React.PointerEvent) => {
+    if (!isDragging) return;
+    try { (e.target as HTMLElement).releasePointerCapture?.(e.pointerId); } catch {}
+    finishSwipe(e.clientX);
+  }, [isDragging, finishSwipe]);
+
+  // pointerleave 时只回弹，不触发切屏（移动端手指滑出边缘时坐标不可靠）
+  const handleLeave = useCallback(() => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    setIsAnimating(true);
+    setOffset(0);
+  }, [isDragging]);
 
   useEffect(() => { setOffset(0); }, [currentScreen]);
 
@@ -99,7 +110,7 @@ export default function SwipeContainer({
       onPointerMove={handleMove}
       onPointerUp={handleUp}
       onPointerCancel={handleUp}
-      onPointerLeave={handleUp}
+      onPointerLeave={handleLeave}
       style={{
         position: 'fixed', inset: 0,
         overflow: 'hidden',

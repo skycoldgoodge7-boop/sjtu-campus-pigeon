@@ -122,10 +122,11 @@ export default function HomeScreen() {
   const landmark = landmarks.find((l) => l.id === currentLandmarkId);
   const targetLandmark = targetLandmarkId ? landmarks.find((l) => l.id === targetLandmarkId) : null;
 
-  const statusText = useMemo(() => {
+  // 直接计算，不用 useMemo — Date.now() 需要每帧刷新才能正确判断过期
+  const statusText = (() => {
     if (recentStatusText && Date.now() < statusExpiresAt) return recentStatusText;
     return getActivityLabel(activity, landmark?.name, targetLandmark?.name);
-  }, [recentStatusText, statusExpiresAt, activity, landmark, targetLandmark]);
+  })();
 
   const topMood = useMemo(() => {
     let maxK = 'slack'; let maxV = 0;

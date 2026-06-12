@@ -11,7 +11,7 @@ export interface LandmarkCollectible {
   story: string;
 }
 
-const COLLECTIBLES: Record<string, LandmarkCollectible[]> = {
+export const COLLECTIBLES: Record<string, LandmarkCollectible[]> = {
   'siyuan-lake': [
     { name: '湖边落叶', emoji: '🍃', description: '思源湖畔的银杏叶，叶脉里藏着秋天的故事。', rarity: 'common', story: '一片银杏叶打着旋儿落在鸽子背上。咕咕回头看了看——叶子的颜色和鸽子的羽毛有点像。鸽子决定收下这份配色方案。' },
     { name: '湖心涟漪', emoji: '💧', description: '思源湖面的一圈波纹，凝固在了一片小小水珠里。', rarity: 'common', story: '一条鱼跃出水面，溅起一圈完美的涟漪。鸽子刚好蹲在旁边的石头上，低头碰了碰那片湿痕——这大概是鸽子离"水上运动"最近的时刻。' },

@@ -11,7 +11,6 @@ import { landmarks } from '../data/landmarks';
 import {
   LANDMARK_CONFIGS, STAY_TIMES, MAP_POSITIONS, ROAD_PATHS, getDistanceWeight,
 } from '../data/mapLayout';
-import { generateDailyPhoto, getAvailableLandmarkIds } from '../utils/photoEngine';
 import { getTodayDateString, isVoteOpen, isNewspaperTime } from '../utils/time';
 import { characters } from '../data/characters';
 import type { CharacterInfluence } from '../data/characters';
@@ -29,8 +28,9 @@ import {
   type JournalContext, type VoteGenContext, type TopicGenContext, type NewspaperContext,
 } from '../utils/ai';
 import { getFallbackQuestion, getFallbackTopic } from '../data/fallbackQuestions';
-import { getCollectibleForLandmark, findCollectibleStory, LANDMARK_ID_TO_NAME } from '../data/backpackItems';
+import { findCollectibleStory, LANDMARK_ID_TO_NAME, COLLECTIBLES } from '../data/backpackItems';
 import { landmarkPhotos } from '../data/photoGallery';
+import { TIME_GRADIENTS } from '../data/photoCaptions';
 
 // ============================================================
 // 数据库类型
@@ -194,6 +194,26 @@ const sb = () => getSupabase();
 
 // 全局同步定时器（模块级，不依赖 React）
 let globalSyncTimer: ReturnType<typeof setInterval> | null = null;
+
+// Supabase Realtime 频道（防止 StrictMode 双重挂载时重复创建）
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let globalRealtimeChannel: any = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let globalHotspotChannel: any = null;
+
+// 🔧 防重复生成锁：防止异步并发导致同日日记/日报/投票/传闻被多次创建
+const lockedDates = new Set<string>();
+
+function tryAcquireDateLock(date: string): boolean {
+  if (lockedDates.has(date)) return false;
+  lockedDates.add(date);
+  return true;
+}
+
+function releaseDateLock(date: string) {
+  lockedDates.delete(date);
+}
+
 function startGlobalSync() {
   if (globalSyncTimer) return; // 防止重复启动
   globalSyncTimer = setInterval(() => {
@@ -431,11 +451,16 @@ async function cloudSyncDailyVote(vote: DailyVote) {
 async function cloudSyncUserVote(userId: string, date: string, voteIndex: number, rumorVote: string | null) {
   if (!isSupabaseConfigured()) return;
   try {
-    await db.upsertUserVote({
+    const upsertData: Record<string, unknown> = {
       id: `${userId}-${date}`,
-      user_id: userId, date, vote_index: voteIndex,
-      rumor_vote: rumorVote, voted_at: Date.now(),
-    });
+      user_id: userId,
+      date,
+      vote_index: voteIndex,
+      voted_at: Date.now(),
+    };
+    // 只在非 null 时才更新 rumor_vote，避免每日投票覆盖已有的话题投票
+    if (rumorVote !== null) upsertData.rumor_vote = rumorVote;
+    await db.upsertUserVote(upsertData);
   } catch { /* silent */ }
 }
 
@@ -604,7 +629,7 @@ interface PigeonState {
   syncFeedTotalsFromCloud: () => Promise<void>;
   generateDailyVote: () => Promise<void>;
   generateDailyRumor: () => Promise<void>;
-  generateDailyNewspaper: () => Promise<void>;
+  generateDailyNewspaper: (forceDate?: string) => Promise<void>;
   collectBackpackItem: (landmarkId: string) => void;
   getPastNewspapers: () => DailyNewspaper[];
   unlockedFootprints: string[];
@@ -725,9 +750,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
   // ============ 从云端初始化 ============
   initFromCloud: async () => {
-    // 【保护期锁】每次页面加载都设，覆盖 Supabase 初始同步窗口（60秒）
-    // 这样即使 localStorage 被清空，也不会被云端旧值立刻写回
-    set({ lastCrossDayReset: Date.now() });
+    // 🔧 不再无条件设置保护期锁 — 这会导致页面加载后 60 秒内所有喂食被 syncFeedTotalsFromCloud 清零
+    // 跨天保护改为只在检测到真正跨天时设置（在 resetTodayIfNeeded 中）
 
     // 【硬闸门】检查 localStorage 日期，跨天则就地清零
     const realToday = getTodayDateString();
@@ -778,7 +802,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     if (!isSupabaseConfigured()) {
       // 兜底：所有云端数据加载完成后，强制跑一次 resetTodayIfNeeded
       // 覆盖 localStorage 为空但云端有旧值的场景
-      get().resetTodayIfNeeded(true);
+      get().resetTodayIfNeeded();
 
       set({ cloudReady: true });
       startGlobalSync();
@@ -1066,12 +1090,14 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
       // 兜底：所有云端数据加载完成后，强制跑一次 resetTodayIfNeeded
       // 覆盖 localStorage 为空但云端有旧值的场景
-      get().resetTodayIfNeeded(true);
+      get().resetTodayIfNeeded();
 
       set({ cloudReady: true });
       startGlobalSync();
-      // 订阅所有表的实时更新
-      const channel = sb()!.channel('pigeon-realtime');
+
+      // 订阅所有表的实时更新（防 StrictMode 双重挂载重复订阅）
+      if (!globalRealtimeChannel) {
+        const channel = sb()!.channel('pigeon-realtime');
 
       // pigeon_state 更新 → 鸽子位置/情绪同步
       channel.on('postgres_changes',
@@ -1105,8 +1131,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           const cur = get();
           set({
             todayDate: tm.today_date || cur.todayDate,
-            // 保护期内或本地刚重置（=0）时不接受云端旧值覆盖
-            todayFeedCount: (isResetProtected() || cur.todayFeedCount === 0)
+            // 🔧 修复：不在 realtime handler 中死锁为 0
+            // 仅保护期内保留本地值；保护期外始终取 local/cloud 最大值
+            todayFeedCount: isResetProtected()
               ? cur.todayFeedCount
               : Math.max(tm.today_feed_count ?? 0, cur.todayFeedCount),
             todayLandmarksVisited: isResetProtected() ? cur.todayLandmarksVisited : (tm.today_landmarks_visited || cur.todayLandmarksVisited),
@@ -1131,7 +1158,10 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             const feedTotals = { ...s.feedTotals };
             feedTotals[ft.item_id] = Math.max(feedTotals[ft.item_id] || 0, ft.count);
             const todayFeedTotals = { ...s.todayFeedTotals };
-            todayFeedTotals[ft.item_id] = Math.max(todayFeedTotals[ft.item_id] || 0, ft.today_count);
+            // 🔧 保护期内不合并云端 today_count，防止跨天残留
+            if (!isResetProtected()) {
+              todayFeedTotals[ft.item_id] = Math.max(todayFeedTotals[ft.item_id] || 0, ft.today_count);
+            }
             return { feedTotals, todayFeedTotals };
           });
         }
@@ -1221,6 +1251,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       channel.on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'campus_rumors' }, handleRumorUpdate);
 
       channel.subscribe();
+        globalRealtimeChannel = channel;
+      }
 
       // 加载校园热点
       get().syncHotspotsFromCloud();
@@ -1253,13 +1285,16 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         }
       }, 2000);
 
-      // 订阅校园热点实时更新
-      const hotspotChannel = sb()!.channel('hotspot-realtime');
-      hotspotChannel.on('postgres_changes',
-        { event: '*', schema: 'public', table: 'campus_hotspots' },
-        () => { get().syncHotspotsFromCloud(); }
-      );
-      hotspotChannel.subscribe();
+      // 订阅校园热点实时更新（防 StrictMode 双重订阅）
+      if (!globalHotspotChannel) {
+        const hotspotChannel = sb()!.channel('hotspot-realtime');
+        hotspotChannel.on('postgres_changes',
+          { event: '*', schema: 'public', table: 'campus_hotspots' },
+          () => { get().syncHotspotsFromCloud(); }
+        );
+        hotspotChannel.subscribe();
+        globalHotspotChannel = hotspotChannel;
+      }
     } catch {
       // Supabase 失败，localStorage 已在前面加载完毕
       set({ cloudReady: true, cloudError: true });
@@ -1448,6 +1483,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
     // Don't regenerate if already exists for today
     if (state.dailyVote?.date === today) return;
+    // 🔧 日期级锁：防止异步并发重复生成
+    if (!tryAcquireDateLock(`vote-${today}`)) return;
 
     // 先尝试从云端获取今天的投票（防止覆盖其他设备已生成的投票及数据）
     if (isSupabaseConfigured()) {
@@ -1487,6 +1524,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     };
 
     set({ dailyVote: vote });
+    releaseDateLock(`vote-${today}`);
     localSave(get());
     setTimeout(() => cloudSyncDailyVote(vote), 50);
 
@@ -1529,7 +1567,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
   castVote: async (optionIndex: number) => {
     const state = get();
     const today = getTodayDateString();
-    if (state.userVoteRecord?.date === today) return; // already voted
+    // 检查是否已经为今天的每日投票投过票（voteIndex >= 0 表示投过了）
+    if (state.userVoteRecord?.date === today && (state.userVoteRecord.voteIndex ?? -1) >= 0) return;
 
     // 22:00 投票截止
     if (!isVoteOpen()) return;
@@ -1542,7 +1581,12 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     newCounts[optionIndex] = (newCounts[optionIndex] || 0) + 1;
     const newTotal = vote.totalVotes + 1;
     const updatedVote: DailyVote = { ...vote, voteCounts: newCounts, totalVotes: newTotal };
-    const record: UserVoteRecord = { date: today, voteIndex: optionIndex, rumorVote: null, topicVote: null };
+    const record: UserVoteRecord = {
+      date: today,
+      voteIndex: optionIndex,
+      rumorVote: state.userVoteRecord?.rumorVote ?? null,
+      topicVote: state.userVoteRecord?.topicVote ?? null,
+    };
 
     set({ dailyVote: updatedVote, userVoteRecord: record });
     saveUserVoteRecord(record);
@@ -1592,6 +1636,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const state = get();
     const today = getTodayDateString();
     if (state.campusRumor?.date === today) return;
+    // 🔧 日期级锁：防止异步并发重复生成
+    if (!tryAcquireDateLock(`rumor-${today}`)) return;
 
     // 先尝试从云端获取今天的传闻（可能其他设备已生成且已有投票）
     if (isSupabaseConfigured()) {
@@ -1640,6 +1686,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     };
 
     set({ campusRumor: rumor });
+    releaseDateLock(`rumor-${today}`);
     localSave(get());
     // 使用 INSERT 而非 UPSERT：如果云端已有记录就不覆盖（ON CONFLICT DO NOTHING）
     if (isSupabaseConfigured()) {
@@ -1649,11 +1696,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           true_votes: 0, false_votes: 0, generated_at: rumor.generatedAt,
         });
       } catch {
-        // 如果已存在（duplicate key），尝试 upsert 但只更新 content（保留投票数据）
+        // 如果已存在（duplicate key），只更新 content，保留投票数据
         try {
-          await (sb()! as any).rpc('upsert_rumor_content', {
-            p_id: rumor.id, p_date: rumor.date, p_content: rumor.content,
-          });
+          await (sb()! as any).from('campus_rumors')
+            .update({ content: rumor.content })
+            .eq('id', rumor.id);
         } catch { /* silent */ }
       }
     } else {
@@ -1673,7 +1720,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
     const newRecord: UserVoteRecord = {
       date: today,
-      voteIndex: record?.voteIndex ?? 0,
+      // -1 表示"今天还没参加每日投票"，避免和 voteIndex=0（选项0）冲突
+      voteIndex: record?.date === today ? (record.voteIndex ?? -1) : -1,
       rumorVote: vote,
       topicVote: vote === 'true' ? 'agree' : 'disagree',
     };
@@ -1750,8 +1798,14 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const state = get();
     const today = getTodayDateString();
 
-    const collectible = getCollectibleForLandmark(landmarkId);
-    if (!collectible) return;
+    const allItems = COLLECTIBLES[landmarkId];
+    if (!allItems || allItems.length === 0) return;
+
+    // 🔧 优先从未收集的物品中随机选择，而不是从全部池子随机
+    const collectedIds = new Set(state.backpackItems.map((bi) => bi.id));
+    const uncollected = allItems.filter((c) => !collectedIds.has(`backpack-${landmarkId}-${c.name}`));
+    const pool = uncollected.length > 0 ? uncollected : allItems;
+    const collectible = pool[Math.floor(Math.random() * pool.length)];
 
     // 每个具体物品全局唯一（不重复收集同一件）
     const itemId = `backpack-${landmarkId}-${collectible.name}`;
@@ -1817,12 +1871,12 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         merged.sort((a, b) => b.date.localeCompare(a.date));
         const finalPapers = merged.slice(0, 60);
 
-        // 云端最新报纸如果是昨天/今天的 → 设为当前日报
+        // 只有今天的报纸才设为当前日报；昨天及更早的只入 pastNewspapers
         const latestPaper = allPapers[0];
-        const isCurrent = latestPaper?.date === today || latestPaper?.date === yesterday;
+        const isToday = latestPaper?.date === today;
 
         set({
-          dailyNewspaper: isCurrent ? latestPaper : cur.dailyNewspaper, // 云端没有就不覆盖本地
+          dailyNewspaper: isToday ? latestPaper : cur.dailyNewspaper,
           pastNewspapers: finalPapers,
         });
         localSave(get());
@@ -1893,16 +1947,18 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
             }
             // 否则不写键 —— 避免 0 值污染
           }
+          // 🔧 修复：保护期内保留本地值（不强制 0），保护期外用 max 合并
+          // 这样跨天保护依然存在，但不会把正常喂食清零
+          const resolvedTodayFeedCount = isResetProtected()
+            ? cur.todayFeedCount
+            : cloudDateMatches
+              ? (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount)
+              : cur.todayFeedCount;
+
           return {
             feedTotals: merged,
             todayFeedTotals: mergedToday,
-            todayFeedCount: isResetProtected()
-              ? 0
-              : cloudDateMatches
-                ? (cur.todayFeedCount === 0
-                    ? 0
-                    : (tm ? Math.max(cur.todayFeedCount, tm.today_feed_count ?? 0) : cur.todayFeedCount))
-                : cur.todayFeedCount,
+            todayFeedCount: resolvedTodayFeedCount,
           };
         });
         localSave(get());
@@ -1910,18 +1966,22 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     } catch { /* silent */ }
   },
 
-  generateDailyNewspaper: async () => {
+  generateDailyNewspaper: async (forceDate?: string) => {
     const state = get();
-    // 用真实日期算昨天，不依赖 state.todayDate（可能已被重置）
-    const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
+    // 🔧 支持 forceDate（23:00 提前生成时传 today），否则默认昨天
+    const targetDate = forceDate || (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
 
-    // 如果已有今天的日报就不用重复生成
-    if (state.dailyNewspaper?.date === yesterday) return;
+    const newspaperId = `newspaper-${targetDate}`;
+
+    // 🔧 防重复：日期锁 + 状态检查双重保护（async 函数，必须先抢锁）
+    if (!tryAcquireDateLock(newspaperId)) return;
+    if (state.dailyNewspaper?.date === targetDate) { releaseDateLock(newspaperId); return; }
+    if (state.pastNewspapers?.some((p) => p.id === newspaperId)) { releaseDateLock(newspaperId); return; }
 
     const apiKey = state.zhipuApiKey;
 
     // V2.0: 日报不再依赖日记 — 直接从 state 提取数据
-    const photo = state.dailyPhotos.find((p) => p.id.includes(yesterday));
+    const photo = state.dailyPhotos.find((p) => p.id.includes(targetDate));
     const vote = state.dailyVote;
     const rumor = state.campusRumor;
 
@@ -1960,7 +2020,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     }
 
     const ctx: NewspaperContext = {
-      date: yesterday,
+      date: targetDate,
       locationName,
       locationEmoji,
       itinerary,
@@ -1970,7 +2030,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       voteDistribution: voteDist,
       resultMood: vote?.resultMood || '😊',
       photoCaption: photo?.caption || '今天没有照片',
-      collectedItems: state.backpackItems.filter((bi) => bi.collectedAt === yesterday).map((bi) => ({
+      collectedItems: state.backpackItems.filter((bi) => bi.collectedAt === targetDate).map((bi) => ({
         emoji: bi.emoji, name: bi.name, description: bi.description,
       })),
       rumorContent: rumor?.content || null,
@@ -1988,7 +2048,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       if (h) headline = h;
     }
     if (!headline) {
-      headline = `${yesterday.slice(5)} 校园鸽报`;
+      headline = `${targetDate.slice(5)} 校园鸽报`;
     }
 
     // 生成内容
@@ -2000,8 +2060,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     }
 
     const np: DailyNewspaper = {
-      id: `newspaper-${yesterday}`,
-      date: yesterday,
+      id: `newspaper-${targetDate}`,
+      date: targetDate,
       headline,
       interactionCount,
       locationName,
@@ -2016,7 +2076,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
         resultMood: vote.resultMood,
       } : null,
       photoId: photo?.id || null,
-      collectedItems: state.backpackItems.filter((bi) => bi.collectedAt === yesterday),
+      collectedItems: state.backpackItems.filter((bi) => bi.collectedAt === targetDate),
       rumorContent: rumor?.content || null,
       pigeonThought: content || '',
       content: content || '',
@@ -2024,11 +2084,14 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
 
     set((s) => {
       const existing = s.pastNewspapers.filter((p) => p.id !== np.id);
+      // 只有今天的报纸才更新 dailyNewspaper；昨天的只入 pastNewspapers 存档
+      const isToday = np.date === getTodayDateString();
       return {
-        dailyNewspaper: np,
+        dailyNewspaper: isToday ? np : s.dailyNewspaper,
         pastNewspapers: [np, ...existing].slice(0, 60),
       };
     });
+    releaseDateLock(np.id);
     localSave(get());
     setTimeout(() => cloudSyncNewspaper(np), 50);
   },
@@ -2066,8 +2129,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     else if (itemId === 'scarf') giftUpdates.hasScarf = true;
     else if (itemId === 'flower') giftUpdates.hasFlower = true;
     const newGiftFlags = Object.keys(giftUpdates).length > 0
-      ? { ...state.giftFlags, ...giftUpdates }
-      : state.giftFlags;
+      ? { ...fresh.giftFlags, ...giftUpdates }
+      : fresh.giftFlags;
 
     set({
       feedTotals: newTotals,
@@ -2081,6 +2144,9 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       statusTextExpiresAt: Date.now() + 5000,
       giftFlags: newGiftFlags,
     });
+
+    // 🔧 喂食时触发当前位置的遇见检查，让用户互动直接推动角色解锁
+    checkEncounters(get, fresh.currentLandmarkId, new Date().getHours(), balancedMood);
 
     const ns = get();
     localSave(ns);
@@ -2117,11 +2183,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const now = Date.now();
     const hour = new Date().getHours();
 
-    // 23:00 提前生成明日报纸（错峰，不等午夜）
+    // 23:00 提前生成今日报纸（错峰，不等午夜；传 today 防止内部算成昨天）
     if (isNewspaperTime()) {
-      const yesterday = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); })();
-      if (!state.dailyNewspaper || state.dailyNewspaper.date !== yesterday) {
-        get().generateDailyNewspaper();
+      const today = getTodayDateString();
+      if (!state.dailyNewspaper || state.dailyNewspaper.date !== today) {
+        get().generateDailyNewspaper(today);
       }
     }
 
@@ -2135,16 +2201,25 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       set({ landmarkStayDurations: durations, lastStayStartTime: now });
       localSave(get());
       setTimeout(() => cloudSyncState(get()), 50);
+      // 🔧 驻留期间也触发遇见检查（之前完全跳过，导致角色几乎无法解锁）
+      if (Math.random() < 0.30) {
+        checkEncounters(get, state.currentLandmarkId, hour, state.mood);
+      }
       return;
     }
 
     if (hour >= 23 || hour < 6) {
-      if (Math.random() < 0.92) {
+      if (Math.random() < 0.60) {
         set({ pigeonActivity: 'sleeping', landmarkStayDurations: durations, lastStayStartTime: now });
+        // 🔧 睡眠期间也有小概率遇见（夜行动物、深夜研究生等）
+        if (Math.random() < 0.15) {
+          checkEncounters(get, state.currentLandmarkId, hour, state.mood);
+        }
         localSave(get());
         setTimeout(() => cloudSyncState(get()), 50);
         return;
       }
+      // 🔧 夜间醒来时移动概率提升（凌晨校园空旷，鸽子反而更自由）
     }
 
     // P2: 投票仪式感 — 白天偶发，22点后必发
@@ -2197,6 +2272,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     if (state.mood.energy > 70) moveChance += 0.08;
     if (state.mood.slack > 70) moveChance -= 0.08;
     if (state.recentFeeds.slice(-5).some((f) => f.itemId === 'coffee')) moveChance += 0.05;
+    // 🔧 不睡觉的深夜，鸽子反而更自由（探索偏远地标的好时机）
+    if ((hour >= 23 || hour < 6) && state.pigeonActivity !== 'sleeping') moveChance += 0.15;
 
     // 投票结果影响移动概率
     const behaviorMod = state.dailyVote?.resultBehaviorModifier;
@@ -2355,7 +2432,11 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
           pigeonReply: reply,
           content: `今天鸽子捡到了一张纸条：「${picked.text}」\n鸽子回复：「${reply}」`,
         };
-        set((s) => ({ journalEntries: [tempJournal, ...s.journalEntries].slice(0, 30) }));
+        // 🔧 去重：已在 generateDailyJournal 中创建了完整日记的不重复
+        set((s) => {
+          const deduped = s.journalEntries.filter((j) => j.id !== journalId);
+          return { journalEntries: [tempJournal, ...deduped].slice(0, 30) };
+        });
         localSave(get());
         setTimeout(() => cloudSyncJournal(tempJournal), 50);
       }
@@ -2385,7 +2466,7 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     const newMood = { ...state.mood };
     for (const key of Object.keys(newMood) as (keyof CampusMood)[]) {
       const diff = newMood[key] - 50;
-      newMood[key] = clamp(newMood[key] - diff * 0.004);
+      newMood[key] = clamp(newMood[key] - diff * 0.01);
     }
     // 天气情绪偏置
     const weather = state.weatherData;
@@ -2411,6 +2492,8 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     set({ mood: normalizeMood(newMood) });
     localSave(get());
     setTimeout(() => cloudSyncState(get()), 50);
+    // 🔧 情绪衰减后检查角色消失（之前只在跨天执行）
+    state.checkDisappearances();
     state.sinkOldBottles();
   },
 
@@ -2459,11 +2542,14 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
       set({
         todayDate: today, todayFeedTotals: {}, todayFeedCount: 0,
         todayLandmarksVisited: [], todayEncounters: [],
-        landmarkStayDurations: {}, lastStayStartTime: Date.now(),
+        // ⚠️ 不清零 landmarkStayDurations — 这是累积统计数据，同步到 Supabase
+        // 跨天日志/日报已在上面 generateDailyJournal/Newspaper 中正确捕获昨日数据
+        lastStayStartTime: Date.now(),
         lastCrossDayReset: Date.now(),
+        // 跨天时投票和传闻需要重置，但日报由 generateDailyNewspaper 异步更新
+        // 不在此处清零 dailyNewspaper — 否则会覆盖刚刚 generateDailyNewspaper 写入的结果
         dailyVote: actuallyCrossDay ? null : state.dailyVote,
         campusRumor: actuallyCrossDay ? null : state.campusRumor,
-        dailyNewspaper: actuallyCrossDay ? null : state.dailyNewspaper,
         messages: hasChanged ? clearedMessages : state.messages,
         giftFlags: { hasUmbrella: false, hasCamera: false, hasHeadphone: false, hasScarf: false, hasFlower: false },
         voteRitualDone: false, voteRitualLabel: '',
@@ -2512,9 +2598,14 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
   generateDailyJournal: (forceDate?: string) => {
     const state = get();
     const yesterday = forceDate || state.todayDate;
+    const journalId = `journal-${yesterday}`;
+
+    // 🔧 防重复：日期锁 + 状态检查双重保护
+    if (state.journalEntries.some((j) => j.id === journalId)) return;
+    if (!tryAcquireDateLock(journalId)) return;
+
     const feedCount = state.todayFeedCount;
     const hadInteraction = feedCount > 0;
-
     let topItem = '面包'; let topCount = 0;
     for (const [itemId, count] of Object.entries(state.todayFeedTotals)) {
       if (count > topCount) { topItem = itemId; topCount = count; }
@@ -2534,27 +2625,72 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     if (maxDuration === 0) mostStayed = state.currentLandmarkId;
     const mostStayedLm = landmarks.find((l) => l.id === mostStayed);
 
-    // 每日照片：先检查是否已有今日照片（云端来的），没有再生成
+    // 🔧 每日图鉴解锁：每天解锁一张照片，优先选"已解锁最少"的地标，保证多样性
+    // 如果今天有访问新地标 → 优先从中选；否则扫描所有地标，选库存最多的
+    const visitedIds = [...new Set(
+      state.todayLandmarksVisited.length > 0 ? state.todayLandmarksVisited : [state.currentLandmarkId]
+    )];
+    const curUnlocked = new Set(state.unlockedFootprints);
+
+    // 找出"还有未解锁照片"的地标，按已解锁数量升序排列
+    const candidates: { vid: string; name: string; lockedCount: number; lockedPath: string }[] = [];
+    for (const [vid, name] of Object.entries(LANDMARK_ID_TO_NAME)) {
+      if (!landmarkPhotos[name]) continue;
+      const locked = landmarkPhotos[name].find((p) => !curUnlocked.has(p.path));
+      if (!locked) continue; // 该地标已全解锁
+      const unlockedHere = landmarkPhotos[name].filter((p) => curUnlocked.has(p.path)).length;
+      candidates.push({ vid, name, lockedCount: unlockedHere, lockedPath: locked.path });
+    }
+
+    let picked: { vid: string; name: string; path: string } | null = null;
+    if (candidates.length > 0) {
+      // 优先：今天访问过的地标中，已解锁数最少的
+      const visitedCandidates = candidates.filter((c) => visitedIds.includes(c.vid));
+      const pool = visitedCandidates.length > 0 ? visitedCandidates : candidates;
+      // 按 lockedCount 升序 → 最少已解锁的地标优先
+      pool.sort((a, b) => a.lockedCount - b.lockedCount);
+      // 从 lockedCount 最小的几个中随机选
+      const topN = pool.filter((c) => c.lockedCount === pool[0].lockedCount);
+      const chosen = topN[Math.floor(Math.random() * topN.length)];
+      picked = { vid: chosen.vid, name: chosen.name, path: chosen.lockedPath };
+    }
+
+    if (picked) {
+      const nextUnlocked = [...new Set([...state.unlockedFootprints, picked.path])];
+      set({ unlockedFootprints: nextUnlocked });
+      try { localStorage.setItem('pigeon-footprints', JSON.stringify(nextUnlocked)); } catch {}
+    }
+
+    // 🔧 每日插图：用刚选的照片（若有），否则取已解锁的最后一张
     const existingTodayPhoto = state.dailyPhotos.find((p) => p.id === `daily-photo-${yesterday}`);
     if (!existingTodayPhoto) {
-      const availableIds = getAvailableLandmarkIds(state.usedPhotoUrls);
-      const photoLandmarkId = availableIds.length > 0
-        ? availableIds[Math.floor(Math.random() * availableIds.length)]
-        : landmarks[Math.floor(Math.random() * landmarks.length)].id;
-      const randomLm = landmarks.find((l) => l.id === photoLandmarkId);
-      if (randomLm) {
-        const dailyPhoto = generateDailyPhoto(randomLm.id, state.mood, yesterday, state.usedPhotoUrls);
-        // 强制使用日期作为ID，多端共享同一张照片
-        dailyPhoto.id = `daily-photo-${yesterday}`;
-        const newUsedUrls = [...state.usedPhotoUrls];
-        if (dailyPhoto.photoUrl && !newUsedUrls.includes(dailyPhoto.photoUrl)) newUsedUrls.push(dailyPhoto.photoUrl);
-        // 替换已有同日期照片（如果有的话）
+      const illustrationPath: string | undefined = picked?.path
+        || ([...new Set(state.unlockedFootprints)].pop());
+
+      if (illustrationPath) {
+        const pickedLm = landmarks.find((l) => l.id === picked?.vid) || mostStayedLm || landmarks[0];
+        const dailyPhoto: PhotoCard = {
+          id: `daily-photo-${yesterday}`,
+          timestamp: Date.now(),
+          landmarkId: pickedLm.id,
+          landmarkName: pickedLm.name,
+          landmarkEmoji: pickedLm.emoji,
+          timeOfDay: getTimeOfDay(),
+          campusState: getCampusState(state.mood),
+          dominantMood: 'default',
+          moodValue: 50,
+          sceneEmojis: [pickedLm.emoji, '🕊️'],
+          caption: `鸽子在${pickedLm.name}的一天。`,
+          gradient: TIME_GRADIENTS[getTimeOfDay()],
+          photoUrl: illustrationPath,
+          isEasterEgg: false,
+        };
+
         const filtered = state.dailyPhotos.filter((p) => p.id !== dailyPhoto.id);
-        set({ dailyPhotos: [dailyPhoto, ...filtered].slice(0, 60), usedPhotoUrls: newUsedUrls.slice(-200) });
+        set({ dailyPhotos: [dailyPhoto, ...filtered].slice(0, 60) });
         const ns = get();
         localSave(ns);
         setTimeout(() => cloudSyncPhoto(dailyPhoto), 50);
-        setTimeout(() => cloudSyncState(ns), 50);
       }
     }
 
@@ -2720,30 +2856,21 @@ export const usePigeonStore = create<PigeonState>()((set, get) => ({
     ];
     content += `\n${closings[Math.floor(Math.random() * closings.length)]}`;
 
-    // 按当天访问的地标解锁足迹照片（每天每地标一张）
-    const visitedIds = state.todayLandmarksVisited.length > 0 ? state.todayLandmarksVisited : [state.currentLandmarkId];
-    for (const vid of [...new Set(visitedIds)]) {
-      const name = LANDMARK_ID_TO_NAME[vid];
-      if (!name || !landmarkPhotos[name]) continue;
-      const allPhotos = landmarkPhotos[name];
-      const curUnlocked = new Set(get().unlockedFootprints);
-      const locked = allPhotos.find((p) => !curUnlocked.has(p.path));
-      if (locked) {
-        const next = [...get().unlockedFootprints, locked.path];
-        set({ unlockedFootprints: next });
-        try { localStorage.setItem('pigeon-footprints', JSON.stringify(next)); } catch {}
-      }
-    }
+    // 🔧 每日插图 = 图鉴解锁（已在上面照片选取中同步完成，此处不再重复解锁）
 
     const journal: DailyJournal = {
-      id: `journal-${yesterday}`, date: yesterday, feedCount,
+      id: journalId, date: yesterday, feedCount,
       topFeedItem: topItemName, topFeedCount: topCount, specialItems,
       landmarksVisited: visitedIds,
       mostStayedLandmark: mostStayedLm?.name || '思源湖', nightActivity, campusState,
       hasUmbrella: (state.feedTotals['umbrella'] || 0) > 0, pickedNote, pigeonReply, content,
     };
 
-    set((s) => ({ journalEntries: [journal, ...s.journalEntries].slice(0, 30) }));
+    set((s) => {
+      const deduped = s.journalEntries.filter((j) => j.id !== journal.id);
+      return { journalEntries: [journal, ...deduped].slice(0, 30) };
+    });
+    releaseDateLock(journalId);
     localSave(get());
     setTimeout(() => cloudSyncJournal(journal), 50);
 
@@ -2809,7 +2936,7 @@ function selectDestination(state: PigeonState): string | null {
     let score = 0.3 + Math.random() * 0.7;
     if (zone === 'core') score *= 2.0;
     else if (zone === 'medium') score *= 1.2;
-    else score *= 0.5;
+    else score *= 0.7;
     score *= getDistanceWeight(state.currentLandmarkId, lm.id);
 
     if (state.mood.academic > 60 && (lm.category === 'academic' || lm.category === 'culture')) score *= 1.5;
@@ -2828,9 +2955,10 @@ function selectDestination(state: PigeonState): string | null {
     if (campusState === 'spring' && lm.category === 'nature') score *= 1.4;
     if (campusState === 'graduation' && lm.category === 'gate') score *= 1.5;
 
-    if (lm.id === 'siyuan-lake') score *= 2.5;
-    if ((tod === 'night' || tod === 'dawn') && lm.id === 'siyuan-lake') score *= 1.8;
-    if (tod === 'morning' && lm.id === 'siyuan-lake' && state.currentLandmarkId === 'siyuan-lake') score *= 0.4;
+    // 🔧 降低思源湖的基础偏置（2.5→1.3），让鸽子愿意探索远程地标
+    if (lm.id === 'siyuan-lake') score *= 1.3;
+    if ((tod === 'night' || tod === 'dawn') && lm.id === 'siyuan-lake') score *= 1.3;
+    if (tod === 'morning' && lm.id === 'siyuan-lake' && state.currentLandmarkId === 'siyuan-lake') score *= 0.5;
 
     // 校园热点影响地标选择
     for (const hot of state.hotspots) {
@@ -2937,7 +3065,7 @@ function checkEncounters(getState: () => PigeonState, currentLandmarkId: string,
     }
     if (cond.consecutiveDays && ((state.moodStreaks[cond.consecutiveDays.mood] || 0) < cond.consecutiveDays.days || mood[cond.consecutiveDays.mood] < cond.consecutiveDays.threshold)) continue;
 
-    if (Math.random() < 0.25) {
+    if (Math.random() < 0.40) {
       const traceCount = state.characterTraces[char.id] || 0;
       if (char.isRumor || (!state.rememberedCharacters.find((c) => c.characterId === char.id) && traceCount < char.traceThreshold)) {
         usePigeonStore.getState().recordTrace(char.id);

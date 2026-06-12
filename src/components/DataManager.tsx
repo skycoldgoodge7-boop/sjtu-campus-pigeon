@@ -78,7 +78,7 @@ export default function DataManager() {
       const merged = { ...current };
 
       // Merge numeric fields with max
-      const numericFields = ['totalFlights', 'todayFeedCount', 'todayFeedCount'];
+      const numericFields = ['totalFlights', 'todayFeedCount'];
       for (const key of numericFields) {
         if (imported.state?.[key] !== undefined) {
           merged.state = merged.state || {};

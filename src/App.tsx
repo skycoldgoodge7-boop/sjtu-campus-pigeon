@@ -62,11 +62,12 @@ export default function App() {
       }, 1500);
     }
 
-    // 同样补日记
+    // 同样补日记：新用户或昨天有互动的用户都需要补生成
     const hasJournal = store.journalEntries?.some((j: { date: string }) => j.date === yesterday);
+    const isNewUser = store.journalEntries?.length === 0;
     const hadActivity = store.todayFeedCount > 0
       || store.todayLandmarksVisited?.length > 0
-      || store.journalEntries?.length === 0;
+      || isNewUser;
     if (!hasJournal && hadActivity) {
       setTimeout(() => {
         const s = usePigeonStore.getState();

@@ -62,10 +62,11 @@ export default function CampusMap() {
   const landmark = landmarks.find((l) => l.id === currentLandmarkId);
   const isMoving = pigeonActivity === 'walking';
 
-  const statusText = useMemo(() => {
+  // 直接计算，不用 useMemo — Date.now() 需要每帧刷新才能正确判断过期
+  const statusText = (() => {
     if (recentStatusText && Date.now() < statusExpiresAt) return recentStatusText;
     return getActivityLabel(pigeonActivity, '');
-  }, [recentStatusText, statusExpiresAt, pigeonActivity]);
+  })();
 
   // ── 校友记忆碎片 ──
   const DISCOVERED_KEY = 'pigeon-discovered-shards';

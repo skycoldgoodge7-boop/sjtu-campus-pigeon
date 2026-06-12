@@ -150,7 +150,7 @@ export default function RumorBoard({ embedded }: Props) {
             textAlign: 'center', marginTop: 10,
             fontSize: 11, color: '#8B7355', opacity: 0.5,
           }}>
-            {total} 人参与 · {alreadyVoted === 'true' ? '你选择了 👍' : alreadyVoted === 'false' ? '你选择了 👎' : '已参与'}
+            {total} 人参与 · {(userVoteRecord?.topicVote === 'agree' || userVoteRecord?.rumorVote === 'true') ? '你选择了 👍' : (userVoteRecord?.topicVote === 'disagree' || userVoteRecord?.rumorVote === 'false') ? '你选择了 👎' : '已参与'}
           </div>
         </div>
       )}
